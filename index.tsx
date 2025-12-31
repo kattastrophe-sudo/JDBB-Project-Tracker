@@ -1,6 +1,6 @@
-import React, { useState, createContext, useContext, useEffect } from 'react';
+import React, { useState, createContext, useContext, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, MoreHorizontal, Clock, Tag, UserPlus, Trash2, Search, Sun, Moon, ArrowLeft, Camera, FileText, Send, Paperclip } from 'lucide-react';
+import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, MoreHorizontal, Clock, Tag, UserPlus, Trash2, Search, Sun, Moon, ArrowLeft, Camera, FileText, Send, Paperclip, BarChart3, Filter, X, Lock, Eye } from 'lucide-react';
 
 // --- JDBB Design System & Constants ---
 
@@ -72,7 +72,7 @@ interface CheckIn {
   projectId: string;
   studentId: string; // Links to Profile ID for MVP simplicity
   date: string;
-  type: 'progress' | 'submission' | 'question';
+  type: 'progress' | 'submission' | 'question' | 'instructor_comment';
   content: string;
   imageMockUrl?: string; // Simulation of attachment
 }
@@ -83,6 +83,7 @@ interface StudentProjectState {
   studentId: string;
   status: 'not_started' | 'in_progress' | 'submitted' | 'reviewed';
   lastActivity: string;
+  instructorNotes?: string;
 }
 
 // --- Theme Context ---
@@ -132,6 +133,7 @@ interface DataContextType {
   removeStudentFromSemester: (enrollmentId: string) => void;
   addCheckIn: (checkIn: Omit<CheckIn, 'id'>) => void;
   updateProjectStatus: (projectId: string, studentId: string, status: StudentProjectState['status']) => void;
+  updateInstructorNotes: (projectId: string, studentId: string, notes: string) => void;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -157,11 +159,16 @@ const initialProfiles: Profile[] = [
   { id: 'u-1', email: 'alex@student.jdbb.edu', role: ROLES.STUDENT, fullName: 'Alex Student' },
   { id: 'u-2', email: 'sam@student.jdbb.edu', role: ROLES.STUDENT, fullName: 'Sam Jeweler' },
   { id: 'u-3', email: 'casey@student.jdbb.edu', role: ROLES.STUDENT, fullName: 'Casey Caster' },
+  { id: 'u-4', email: 'jordan@student.jdbb.edu', role: ROLES.STUDENT, fullName: 'Jordan Gem' },
+  { id: 'u-5', email: 'taylor@student.jdbb.edu', role: ROLES.STUDENT, fullName: 'Taylor Tool' },
 ];
 
 const initialEnrollments: Enrollment[] = [
   { id: 'e-1', profileId: 'u-1', semesterId: 'sem-1', studentNumber: 'S1000001', tagNumber: '04', status: 'active' },
   { id: 'e-2', profileId: 'u-2', semesterId: 'sem-1', studentNumber: 'S1000002', tagNumber: '12', status: 'active' },
+  { id: 'e-3', profileId: 'u-3', semesterId: 'sem-1', studentNumber: 'S1000003', tagNumber: '01', status: 'active' },
+  { id: 'e-4', profileId: 'u-4', semesterId: 'sem-1', studentNumber: 'S1000004', tagNumber: '15', status: 'active' },
+  { id: 'e-5', profileId: 'u-5', semesterId: 'sem-1', studentNumber: 'S1000005', tagNumber: '08', status: 'active' },
 ];
 
 const initialCheckIns: CheckIn[] = [
@@ -169,7 +176,11 @@ const initialCheckIns: CheckIn[] = [
 ];
 
 const initialProjectStates: StudentProjectState[] = [
-  { id: 'ps-1', projectId: 'p-1', studentId: 'u-1', status: 'in_progress', lastActivity: '2026-01-18' }
+  { id: 'ps-1', projectId: 'p-1', studentId: 'u-1', status: 'in_progress', lastActivity: '2026-01-18' },
+  { id: 'ps-2', projectId: 'p-1', studentId: 'u-2', status: 'submitted', lastActivity: '2026-01-19' },
+  { id: 'ps-3', projectId: 'p-1', studentId: 'u-3', status: 'reviewed', lastActivity: '2026-01-20' },
+  { id: 'ps-4', projectId: 'p-1', studentId: 'u-4', status: 'not_started', lastActivity: '2026-01-15' },
+  { id: 'ps-5', projectId: 'p-2', studentId: 'u-3', status: 'in_progress', lastActivity: '2026-01-21' },
 ];
 
 const DataProvider = ({ children }: { children: React.ReactNode }) => {
@@ -222,8 +233,10 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
     const newCheckIn = { ...checkIn, id: `c-${Date.now()}` };
     setCheckIns([newCheckIn, ...checkIns]);
     
-    // Auto-update status to in_progress if not started
-    updateProjectStatus(checkIn.projectId, checkIn.studentId, 'in_progress');
+    // Auto-update status to in_progress if not started (unless it's an instructor comment)
+    if (checkIn.type !== 'instructor_comment') {
+       updateProjectStatus(checkIn.projectId, checkIn.studentId, 'in_progress');
+    }
   };
 
   const updateProjectStatus = (projectId: string, studentId: string, status: StudentProjectState['status']) => {
@@ -243,11 +256,29 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
     });
   };
 
+  const updateInstructorNotes = (projectId: string, studentId: string, notes: string) => {
+    setProjectStates(prev => {
+      const existing = prev.find(p => p.projectId === projectId && p.studentId === studentId);
+      if (existing) {
+        return prev.map(p => p.id === existing.id ? { ...p, instructorNotes: notes } : p);
+      } else {
+        return [...prev, {
+          id: `ps-${Date.now()}`,
+          projectId,
+          studentId,
+          status: 'not_started',
+          lastActivity: new Date().toISOString(),
+          instructorNotes: notes
+        }];
+      }
+    });
+  };
+
   return (
     <DataContext.Provider value={{ 
       semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates,
       currentSemesterId, setCurrentSemesterId, addSemester, addScheduleItem,
-      addStudentToSemester, removeStudentFromSemester, addCheckIn, updateProjectStatus
+      addStudentToSemester, removeStudentFromSemester, addCheckIn, updateProjectStatus, updateInstructorNotes
     }}>
       {children}
     </DataContext.Provider>
@@ -376,23 +407,31 @@ const LoginScreen = () => {
   );
 };
 
-// --- View: Project Detail (Student/Admin) ---
+// --- View: Project Detail (Student/Admin Review) ---
 
-const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () => void }) => {
-  const { projects, scheduleItems, checkIns, addCheckIn, projectStates, updateProjectStatus } = useData();
+const ProjectDetail = ({ projectId, onBack, targetStudentId }: { projectId: string; onBack: () => void; targetStudentId?: string }) => {
+  const { projects, scheduleItems, checkIns, addCheckIn, projectStates, updateProjectStatus, updateInstructorNotes, profiles } = useData();
   const { user } = useAuth();
   
+  // Determine who we are viewing
+  // If targetStudentId is provided (Admin viewing Student), use that. Otherwise use logged in user (Student view).
+  const effectiveStudentId = targetStudentId || user.id;
+  const isInstructorReview = !!targetStudentId && user.role !== ROLES.STUDENT;
+
   // Data Fetching
   const project = projects.find(p => p.id === projectId);
   const relevantSchedule = scheduleItems.filter(s => s.projectId === projectId || s.type === 'critique').sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   
   // Student Specific Data
-  const myCheckIns = checkIns.filter(c => c.projectId === projectId && c.studentId === user.id);
-  const myState = projectStates.find(s => s.projectId === projectId && s.studentId === user.id);
-  const currentStatus = myState?.status || 'not_started';
+  const studentCheckIns = checkIns.filter(c => c.projectId === projectId && c.studentId === effectiveStudentId);
+  const studentState = projectStates.find(s => s.projectId === projectId && s.studentId === effectiveStudentId);
+  const currentStatus = studentState?.status || 'not_started';
+  const instructorNotes = studentState?.instructorNotes || '';
+  const studentProfile = profiles.find(p => p.id === effectiveStudentId);
 
   // Form State
   const [note, setNote] = useState('');
+  const [instructorNoteInput, setInstructorNoteInput] = useState(instructorNotes);
   const [hasFile, setHasFile] = useState(false); // Simulated file
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -406,9 +445,9 @@ const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () =>
     setTimeout(() => {
       addCheckIn({
         projectId,
-        studentId: user.id,
+        studentId: effectiveStudentId,
         date: new Date().toISOString(),
-        type: 'progress',
+        type: isInstructorReview ? 'instructor_comment' : 'progress',
         content: note,
         imageMockUrl: hasFile ? 'https://via.placeholder.com/300' : undefined
       });
@@ -419,7 +458,12 @@ const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () =>
   };
 
   const handleStatusChange = (newStatus: StudentProjectState['status']) => {
-    updateProjectStatus(projectId, user.id, newStatus);
+    updateProjectStatus(projectId, effectiveStudentId, newStatus);
+  };
+
+  const handleSaveNotes = () => {
+    updateInstructorNotes(projectId, effectiveStudentId, instructorNoteInput);
+    // Visual feedback could go here
   };
 
   const getStatusColor = (status) => {
@@ -449,13 +493,18 @@ const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () =>
                   <span className="text-xs uppercase tracking-wider font-bold" style={{ color: getStatusColor(currentStatus) }}>
                     {currentStatus.replace('_', ' ')}
                   </span>
+                  {isInstructorReview && (
+                    <span className="ml-2 text-xs font-medium text-slate-500 dark:text-slate-400">
+                      • Reviewing: <span className="text-slate-800 dark:text-slate-200 font-bold">{studentProfile?.fullName}</span>
+                    </span>
+                  )}
                 </div>
                 <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{project.title}</h1>
              </div>
              
              {/* Status Actions */}
              <div className="flex gap-2">
-                {currentStatus !== 'submitted' && currentStatus !== 'reviewed' && (
+                {!isInstructorReview && currentStatus !== 'submitted' && currentStatus !== 'reviewed' && (
                   <Button 
                     variant="outline" 
                     onClick={() => handleStatusChange('submitted')}
@@ -464,10 +513,18 @@ const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () =>
                     Mark as Submitted
                   </Button>
                 )}
-                 {currentStatus === 'submitted' && (
+                 {!isInstructorReview && currentStatus === 'submitted' && (
                   <span className="text-sm font-bold text-emerald-500 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">
                     <CheckCircle size={14} /> Submitted for Review
                   </span>
+                )}
+                
+                {/* Instructor Controls */}
+                {isInstructorReview && (
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => handleStatusChange('in_progress')} className="text-xs h-8">Reset to In Progress</Button>
+                    <Button variant="primary" onClick={() => handleStatusChange('reviewed')} className="text-xs h-8" disabled={currentStatus === 'reviewed'}>Mark Reviewed</Button>
+                  </div>
                 )}
              </div>
           </div>
@@ -478,6 +535,25 @@ const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () =>
         
         {/* Left Column: Context & Timeline */}
         <div className="lg:col-span-1 space-y-6">
+           
+           {/* Instructor Notes (Visible only to Admin) */}
+           {isInstructorReview && (
+             <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-l-4 p-6" style={{ borderColor: COLORS.dustyGrape }}>
+                <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-2 flex items-center gap-2">
+                  <Lock size={16} /> Private Instructor Notes
+                </h3>
+                <p className="text-xs text-slate-500 mb-2">Visible only to staff. Use for grading reminders or safety notes.</p>
+                <textarea 
+                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md p-2 text-sm text-slate-800 dark:text-slate-200 focus:border-emerald-500 outline-none"
+                  rows={4}
+                  value={instructorNoteInput}
+                  onChange={(e) => setInstructorNoteInput(e.target.value)}
+                  onBlur={handleSaveNotes} // Auto-save on blur
+                  placeholder="Enter private notes here..."
+                />
+             </div>
+           )}
+
            {/* Description Card */}
            <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6">
               <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-2">Project Brief</h3>
@@ -520,16 +596,16 @@ const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () =>
         {/* Right Column: Check-in Feed */}
         <div className="lg:col-span-2 space-y-6">
           
-          {/* New Check-in Input */}
+          {/* New Check-in Input (Modified for Instructor context) */}
           <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-4">
              <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
-               <Camera size={18} className="text-emerald-500" /> New Check-in
+               {isInstructorReview ? <><FileText size={18} className="text-purple-500" /> Add Comment to Student</> : <><Camera size={18} className="text-emerald-500" /> New Check-in</>}
              </h3>
              <form onSubmit={handleSubmitCheckIn}>
                <textarea 
                  className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 transition-colors"
                  rows={3}
-                 placeholder="What did you work on today? Any challenges?"
+                 placeholder={isInstructorReview ? "Add a feedback comment visible to the student..." : "What did you work on today? Any challenges?"}
                  value={note}
                  onChange={e => setNote(e.target.value)}
                />
@@ -544,8 +620,8 @@ const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () =>
                     {hasFile ? 'Photo Attached' : 'Add Photo'}
                   </button>
                   
-                  <Button variant="primary" disabled={(!note && !hasFile) || isSubmitting}>
-                     {isSubmitting ? 'Posting...' : <><Send size={14} /> Post Check-in</>}
+                  <Button variant={isInstructorReview ? "secondary" : "primary"} disabled={(!note && !hasFile) || isSubmitting}>
+                     {isSubmitting ? 'Posting...' : <><Send size={14} /> {isInstructorReview ? 'Post Comment' : 'Post Check-in'}</>}
                   </Button>
                </div>
              </form>
@@ -553,28 +629,30 @@ const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () =>
 
           {/* Feed */}
           <div className="space-y-4">
-             <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">History</h3>
-             {myCheckIns.length === 0 ? (
+             <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Project History</h3>
+             {studentCheckIns.length === 0 ? (
                <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
-                 <p className="text-slate-400 dark:text-slate-500">No check-ins yet. Start tracking your progress!</p>
+                 <p className="text-slate-400 dark:text-slate-500">No check-ins yet. {isInstructorReview ? "Student hasn't posted progress." : "Start tracking your progress!"}</p>
                </div>
              ) : (
-               myCheckIns.map(checkIn => (
-                 <div key={checkIn.id} className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+               studentCheckIns.map(checkIn => (
+                 <div key={checkIn.id} className={`rounded-lg shadow-sm border overflow-hidden ${checkIn.type === 'instructor_comment' ? 'bg-purple-50 dark:bg-purple-900/10 border-purple-200 dark:border-purple-800' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800'}`}>
                     <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start">
                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500">
-                             <User size={16} />
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${checkIn.type === 'instructor_comment' ? 'bg-purple-200 text-purple-700' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'}`}>
+                             {checkIn.type === 'instructor_comment' ? <Shield size={16} /> : <User size={16} />}
                           </div>
                           <div>
-                            <div className="text-sm font-bold text-slate-800 dark:text-slate-200">You</div>
+                            <div className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                {checkIn.type === 'instructor_comment' ? 'Instructor' : (isInstructorReview ? studentProfile?.fullName : 'You')}
+                            </div>
                             <div className="text-xs text-slate-500 dark:text-slate-400">
                                {new Date(checkIn.date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
                             </div>
                           </div>
                        </div>
                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded">
-                         {checkIn.type}
+                         {checkIn.type.replace('_', ' ')}
                        </span>
                     </div>
                     <div className="p-4">
@@ -596,6 +674,227 @@ const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () =>
 
         </div>
       </div>
+    </div>
+  );
+};
+
+// --- View: Student Profile (Admin) ---
+
+const StudentProfile = ({ studentId, onBack, onSelectProject }: { studentId: string; onBack: () => void; onSelectProject: (projectId: string, studentId: string) => void }) => {
+  const { profiles, enrollments, projects, currentSemesterId, projectStates } = useData();
+  
+  const student = profiles.find(p => p.id === studentId);
+  const enrollment = enrollments.find(e => e.profileId === studentId && e.semesterId === currentSemesterId);
+  const semesterProjects = projects.filter(p => p.semesterId === currentSemesterId);
+
+  if (!student || !enrollment) return <div>Student not found in this semester.</div>;
+
+  const getStatus = (projectId: string) => {
+    const state = projectStates.find(s => s.projectId === projectId && s.studentId === studentId);
+    return state?.status || 'not_started';
+  };
+
+  return (
+    <div className="space-y-8">
+       {/* Profile Header */}
+       <div className="flex flex-col md:flex-row gap-6 items-start">
+         <button onClick={onBack} className="mt-1 p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+            <ArrowLeft size={20} className="text-slate-600 dark:text-slate-300" />
+         </button>
+         
+         {/* Identity Card */}
+         <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex-1 w-full relative overflow-hidden">
+             <div className="absolute top-0 right-0 w-32 h-32 bg-slate-100 dark:bg-slate-800 rounded-bl-full -mr-16 -mt-16 z-0"></div>
+             <div className="relative z-10 flex items-center gap-6">
+                 <div className="w-20 h-20 rounded-lg bg-slate-800 text-white flex flex-col items-center justify-center font-bold shadow-lg" style={{ backgroundColor: COLORS.dustyGrape }}>
+                    <span className="text-xs uppercase tracking-widest opacity-70">Tag</span>
+                    <span className="text-3xl font-mono">{enrollment.tagNumber}</span>
+                 </div>
+                 <div>
+                    <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{student.fullName}</h1>
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-slate-500 dark:text-slate-400 mt-1">
+                       <span className="flex items-center gap-1"><Shield size={14}/> {enrollment.studentNumber}</span>
+                       <span className="flex items-center gap-1"><Send size={14}/> {student.email}</span>
+                    </div>
+                 </div>
+             </div>
+         </div>
+       </div>
+
+       {/* Progress Overview */}
+       <div>
+         <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+            <Layout size={20} className="text-slate-400" /> Project Status
+         </h3>
+         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {semesterProjects.map(project => {
+               const status = getStatus(project.id);
+               return (
+                  <button 
+                     key={project.id}
+                     onClick={() => onSelectProject(project.id, studentId)}
+                     className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-emerald-400 dark:hover:border-emerald-600 transition-colors group relative overflow-hidden"
+                  >
+                     <div className="flex justify-between items-start mb-2">
+                        <span className="text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded">{project.code}</span>
+                        <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full 
+                          ${status === 'reviewed' ? 'bg-lime-100 text-lime-800' : 
+                            status === 'submitted' ? 'bg-purple-100 text-purple-800' :
+                            status === 'in_progress' ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-500'}`}
+                        >
+                           {status.replace('_', ' ')}
+                        </span>
+                     </div>
+                     <h4 className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{project.title}</h4>
+                     
+                     {/* Hover Overlay Hint */}
+                     <div className="absolute inset-0 bg-slate-900/5 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                        <span className="bg-white dark:bg-slate-800 shadow-sm text-xs font-bold px-3 py-1 rounded-full flex items-center gap-1">
+                           <Eye size={12}/> Review
+                        </span>
+                     </div>
+                  </button>
+               );
+            })}
+         </div>
+       </div>
+    </div>
+  );
+};
+
+// --- View: Progress Matrix (Admin) ---
+
+const ProgressMatrix = ({ onSelectStudent }: { onSelectStudent: (studentId: string) => void }) => {
+  const { currentSemesterId, semesters, projects, enrollments, profiles, projectStates, updateProjectStatus } = useData();
+  const currentSemester = semesters.find(s => s.id === currentSemesterId);
+
+  // Filter Data
+  const semesterProjects = useMemo(() => 
+    projects.filter(p => p.semesterId === currentSemesterId),
+  [projects, currentSemesterId]);
+
+  const semesterEnrollments = useMemo(() => 
+    enrollments.filter(e => e.semesterId === currentSemesterId)
+      .sort((a, b) => parseInt(a.tagNumber) - parseInt(b.tagNumber)),
+  [enrollments, currentSemesterId]);
+
+  const [selectedCell, setSelectedCell] = useState<{enrollmentId: string, projectId: string} | null>(null);
+
+  const getStatus = (studentId: string, projectId: string) => {
+    const state = projectStates.find(s => s.projectId === projectId && s.studentId === studentId);
+    return state?.status || 'not_started';
+  };
+
+  const getStatusStyle = (status: StudentProjectState['status']) => {
+    switch(status) {
+      case 'not_started': return "bg-slate-100 dark:bg-slate-800";
+      case 'in_progress': return "bg-cyan-200 dark:bg-cyan-900/50 text-cyan-900 dark:text-cyan-100";
+      case 'submitted': return "bg-[#525174] text-white"; // Dusty Grape
+      case 'reviewed': return "bg-[#BCE784] text-slate-900"; // Lime Cream
+      default: return "";
+    }
+  };
+
+  const getStatusLabel = (status: StudentProjectState['status']) => {
+     switch(status) {
+      case 'not_started': return "-";
+      case 'in_progress': return "IP";
+      case 'submitted': return "S";
+      case 'reviewed': return "OK";
+      default: return "";
+    }
+  };
+
+  const handleStatusUpdate = (newStatus: StudentProjectState['status']) => {
+     if (!selectedCell) return;
+     const enrollment = enrollments.find(e => e.id === selectedCell.enrollmentId);
+     if (enrollment) {
+       updateProjectStatus(selectedCell.projectId, enrollment.profileId, newStatus);
+       setSelectedCell(null);
+     }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Class Progress</h2>
+          <p className="text-slate-500 dark:text-slate-400">Tracker for {currentSemester?.name}</p>
+        </div>
+        <div className="flex gap-2">
+           <Button variant="outline"><Filter size={16}/> Filter</Button>
+           <Button variant="outline"><BarChart3 size={16}/> Export CSV</Button>
+        </div>
+      </div>
+
+      <div className="overflow-x-auto bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
+        <table className="w-full text-left border-collapse">
+          <thead>
+            <tr className="border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900">
+              <th className="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider sticky left-0 bg-slate-50 dark:bg-slate-900 z-10 w-48 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">Student</th>
+              {semesterProjects.map(p => (
+                <th key={p.id} className="p-4 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider text-center min-w-[100px] border-l border-slate-100 dark:border-slate-800">
+                  {p.code}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+            {semesterEnrollments.map(enrollment => {
+              const profile = profiles.find(p => p.id === enrollment.profileId);
+              return (
+                <tr key={enrollment.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                  <td className="p-4 sticky left-0 bg-white dark:bg-slate-900 group-hover:bg-slate-50 dark:group-hover:bg-slate-800/50 z-10 border-r border-slate-100 dark:border-slate-800 cursor-pointer" onClick={() => onSelectStudent(enrollment.profileId)}>
+                    <div className="flex items-center gap-3">
+                       <span className="font-mono text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-1.5 py-0.5 rounded">
+                         {enrollment.tagNumber}
+                       </span>
+                       <div className="truncate w-32 font-medium text-slate-800 dark:text-slate-200 hover:text-emerald-500 transition-colors" title={profile?.fullName}>
+                         {profile?.fullName}
+                       </div>
+                    </div>
+                  </td>
+                  {semesterProjects.map(project => {
+                    const status = getStatus(enrollment.profileId, project.id);
+                    return (
+                      <td key={project.id} className="p-2 border-l border-slate-100 dark:border-slate-800 text-center">
+                        <button 
+                          onClick={() => setSelectedCell({enrollmentId: enrollment.id, projectId: project.id})}
+                          className={`w-full h-10 rounded text-xs font-bold transition-transform active:scale-95 flex items-center justify-center ${getStatusStyle(status)}`}
+                        >
+                          {getStatusLabel(status)}
+                        </button>
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Quick Status Update Modal (Simulated) */}
+      {selectedCell && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+           <div className="bg-white dark:bg-slate-900 rounded-lg shadow-xl max-w-sm w-full p-6 animate-in fade-in zoom-in duration-200">
+              <div className="flex justify-between items-center mb-4">
+                 <h3 className="font-bold text-slate-800 dark:text-slate-100">Update Status</h3>
+                 <button onClick={() => setSelectedCell(null)} className="text-slate-400 hover:text-slate-600">
+                   <X size={20} />
+                 </button>
+              </div>
+              <p className="text-sm text-slate-500 mb-6">Change project status for this student.</p>
+              
+              <div className="grid grid-cols-2 gap-3">
+                 <button onClick={() => handleStatusUpdate('not_started')} className="p-3 rounded border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800 text-sm font-medium text-slate-600 dark:text-slate-300">Not Started</button>
+                 <button onClick={() => handleStatusUpdate('in_progress')} className="p-3 rounded bg-cyan-100 text-cyan-900 hover:bg-cyan-200 text-sm font-bold">In Progress</button>
+                 <button onClick={() => handleStatusUpdate('submitted')} className="p-3 rounded text-white hover:opacity-90 text-sm font-bold" style={{ backgroundColor: COLORS.dustyGrape }}>Submitted</button>
+                 <button onClick={() => handleStatusUpdate('reviewed')} className="p-3 rounded text-slate-900 hover:opacity-90 text-sm font-bold" style={{ backgroundColor: COLORS.limeCream }}>Reviewed</button>
+              </div>
+           </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -670,7 +969,7 @@ const SemesterList = () => {
 
 // --- View: Roster Manager (Admin) ---
 
-const RosterManager = () => {
+const RosterManager = ({ onSelectStudent }: { onSelectStudent?: (id: string) => void }) => {
   const { profiles, enrollments, currentSemesterId, semesters, addStudentToSemester, removeStudentFromSemester } = useData();
   const currentSemester = semesters.find(s => s.id === currentSemesterId);
 
@@ -838,13 +1137,13 @@ const RosterManager = () => {
           <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
             {rosterData.map((record) => (
               <tr key={record.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group">
-                <td className="px-6 py-4 text-center">
+                <td className="px-6 py-4 text-center cursor-pointer" onClick={() => onSelectStudent && onSelectStudent(record.profileId)}>
                   <span className="inline-flex items-center justify-center w-8 h-8 rounded bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold border border-slate-200 dark:border-slate-600 font-mono">
                     {record.tagNumber}
                   </span>
                 </td>
-                <td className="px-6 py-4">
-                    <div className="font-bold text-slate-800 dark:text-slate-200">{record.profile?.fullName}</div>
+                <td className="px-6 py-4 cursor-pointer" onClick={() => onSelectStudent && onSelectStudent(record.profileId)}>
+                    <div className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-500 transition-colors">{record.profile?.fullName}</div>
                     <div className="md:hidden text-xs text-slate-500 dark:text-slate-400">{record.studentNumber}</div>
                 </td>
                 <td className="px-6 py-4 text-sm text-slate-500 dark:text-slate-400 font-mono hidden md:table-cell">
@@ -1311,6 +1610,12 @@ const Sidebar = ({ isOpen, close, currentView, setView }) => {
       roles: [ROLES.ADMIN_TECH, ROLES.ADMIN_INSTRUCTOR, ROLES.MONITOR, ROLES.STUDENT] 
     },
     { 
+      id: 'matrix',
+      label: 'Class Progress', 
+      icon: BarChart3, 
+      roles: [ROLES.ADMIN_TECH, ROLES.ADMIN_INSTRUCTOR, ROLES.MONITOR] 
+    },
+    { 
       id: 'roster',
       label: 'Student Roster', 
       icon: Users, 
@@ -1378,11 +1683,23 @@ const AppShell = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentView, setCurrentView] = useState('dashboard');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
 
   if (!user) return <LoginScreen />;
 
   const handleSelectProject = (projectId: string) => {
     setSelectedProjectId(projectId);
+    setCurrentView('project_detail');
+  };
+
+  const handleSelectStudent = (studentId: string) => {
+    setSelectedStudentId(studentId);
+    setCurrentView('student_profile');
+  };
+
+  const handleInstructorSelectProject = (projectId: string, studentId: string) => {
+    setSelectedProjectId(projectId);
+    setSelectedStudentId(studentId);
     setCurrentView('project_detail');
   };
 
@@ -1395,11 +1712,21 @@ const AppShell = () => {
       case 'projects':
         return <ProjectManager onSelectProject={handleSelectProject} />;
       case 'project_detail':
-        return <ProjectDetail projectId={selectedProjectId!} onBack={() => setCurrentView('projects')} />;
+        return (
+          <ProjectDetail 
+            projectId={selectedProjectId!} 
+            targetStudentId={selectedStudentId}
+            onBack={() => selectedStudentId ? setCurrentView('student_profile') : setCurrentView('projects')} 
+          />
+        );
+      case 'student_profile':
+        return <StudentProfile studentId={selectedStudentId!} onBack={() => setCurrentView('roster')} onSelectProject={handleInstructorSelectProject} />;
       case 'schedule':
         return <ScheduleManager />;
+      case 'matrix':
+        return <ProgressMatrix onSelectStudent={handleSelectStudent} />;
       case 'roster':
-        return <RosterManager />;
+        return <RosterManager onSelectStudent={handleSelectStudent} />;
       default:
         return user.role === ROLES.STUDENT ? <StudentDashboard /> : <AdminDashboard />;
     }
@@ -1414,7 +1741,10 @@ const AppShell = () => {
         currentView={currentView}
         setView={(view) => {
           setCurrentView(view);
-          if (view !== 'project_detail') setSelectedProjectId(null);
+          if (view !== 'project_detail' && view !== 'student_profile') {
+             setSelectedProjectId(null);
+             setSelectedStudentId(null);
+          }
         }}
       />
       
