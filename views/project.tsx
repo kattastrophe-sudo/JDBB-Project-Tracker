@@ -2,46 +2,138 @@ import React, { useState, useRef } from 'react';
 import { useData, useAuth } from '../data';
 import { ROLES } from '../config';
 import { Button } from '../components';
-import { Plus, Tag, ArrowLeft, Clock, Shield, User, Camera, Send, Download, HelpCircle, X, Image as ImageIcon, Loader2, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { Plus, Tag, ArrowLeft, Clock, Shield, User, Camera, Send, Download, HelpCircle, X, Image as ImageIcon, Loader2, Link as LinkIcon, ExternalLink, Trash2, Edit2, Save } from 'lucide-react';
 
 export const ProjectManager = ({ onSelectProject }) => {
-  const { projects, currentSemesterId, semesters, projectStates, addProject } = useData();
+  const { projects, currentSemesterId, semesters, projectStates, addProject, updateProject, deleteProject } = useData();
   const { user } = useAuth();
   const currentSemester = semesters.find(s => s.id === currentSemesterId);
   const semesterProjects = projects.filter(p => p.semester_id === currentSemesterId);
-  const [isCreating, setIsCreating] = useState(false);
+  
+  // State for Create/Edit Form
+  const [isFormOpen, setIsFormOpen] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  
+  // Form Fields
   const [newCode, setNewCode] = useState('');
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
   const [newRubric, setNewRubric] = useState('');
   const [isPublished, setIsPublished] = useState(false);
+  
   const getStatus = (projectId) => (!user ? 'draft' : projectStates.find(s => s.project_id === projectId && s.student_id === user.id)?.status || 'not_started');
-  const handleCreate = (e) => { 
+  
+  const startCreate = () => {
+      setEditingId(null);
+      setNewCode(''); setNewTitle(''); setNewDesc(''); setNewRubric(''); setIsPublished(false);
+      setIsFormOpen(true);
+  };
+  
+  const startEdit = (e, project) => {
+      e.stopPropagation();
+      setEditingId(project.id);
+      setNewCode(project.code);
+      setNewTitle(project.title);
+      setNewDesc(project.description);
+      setNewRubric(project.rubric_url || '');
+      setIsPublished(project.is_published);
+      setIsFormOpen(true);
+      window.scrollTo(0,0);
+  };
+  
+  const handleDelete = (e, id) => {
+      e.stopPropagation();
+      deleteProject(id);
+  };
+
+  const handleSubmit = (e) => { 
       e.preventDefault(); 
-      addProject({ semesterId: currentSemesterId, code: newCode, title: newTitle, description: newDesc, rubricUrl: newRubric, isPublished }); 
-      setIsCreating(false); setNewCode(''); setNewTitle(''); setNewDesc(''); setNewRubric('');
+      if (editingId) {
+          updateProject(editingId, { 
+              code: newCode, 
+              title: newTitle, 
+              description: newDesc, 
+              rubric_url: newRubric, 
+              is_published: isPublished 
+          });
+      } else {
+          addProject({ 
+              semesterId: currentSemesterId, 
+              code: newCode, 
+              title: newTitle, 
+              description: newDesc, 
+              rubricUrl: newRubric, 
+              isPublished 
+          }); 
+      }
+      setIsFormOpen(false); 
   };
   
   const isAdminTech = user.role === ROLES.ADMIN_TECH;
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center"><div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Projects</h2><p className="text-slate-500 dark:text-slate-400">{currentSemester?.name}</p></div>{isAdminTech && <Button variant="primary" onClick={() => setIsCreating(!isCreating)}>{isCreating ? 'Cancel' : <><Plus size={18} /> New Project</>}</Button>}</div>
-      {isCreating && isAdminTech && <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50 mb-6"><form onSubmit={handleCreate} className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Code</label><input type="text" value={newCode} onChange={e => setNewCode(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required placeholder="P1"/></div>
-              <div className="md:col-span-3"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Title</label><input type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required placeholder="Casting Project"/></div>
+      <div className="flex justify-between items-center">
+          <div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Projects</h2><p className="text-slate-500 dark:text-slate-400">{currentSemester?.name}</p></div>
+          {isAdminTech && <Button variant="primary" onClick={() => isFormOpen ? setIsFormOpen(false) : startCreate()}>{isFormOpen ? 'Cancel' : <><Plus size={18} /> New Project</>}</Button>}
+      </div>
+      
+      {isFormOpen && isAdminTech && (
+          <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50 mb-6 animate-in fade-in slide-in-from-top-2">
+              <h3 className="font-bold text-emerald-600 dark:text-emerald-400 mb-4">{editingId ? 'Edit Project' : 'Create New Project'}</h3>
+              <form onSubmit={handleSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Code</label><input type="text" value={newCode} onChange={e => setNewCode(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required placeholder="P1"/></div>
+                      <div className="md:col-span-3"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Title</label><input type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required placeholder="Casting Project"/></div>
+                  </div>
+                  <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Description</label><textarea rows={3} value={newDesc} onChange={e => setNewDesc(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" placeholder="Project details..."/></div>
+                  <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rubric / Brief URL</label><input type="url" value={newRubric} onChange={e => setNewRubric(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" placeholder="https://docs.google.com/..."/></div>
+                  <div className="flex items-center gap-4"><label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300"><input type="checkbox" checked={isPublished} onChange={e => setIsPublished(e.target.checked)} /> Publish immediately</label></div>
+                  <div className="flex justify-end gap-2">
+                      <Button variant="ghost" onClick={() => setIsFormOpen(false)}>Cancel</Button>
+                      <Button type="submit" variant="primary">{editingId ? 'Save Changes' : 'Create Project'}</Button>
+                  </div>
+              </form>
           </div>
-          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Description</label><textarea rows={3} value={newDesc} onChange={e => setNewDesc(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" placeholder="Project details..."/></div>
-          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rubric / Brief URL</label><input type="url" value={newRubric} onChange={e => setNewRubric(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" placeholder="https://docs.google.com/..."/></div>
-          <div className="flex items-center gap-4"><label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300"><input type="checkbox" checked={isPublished} onChange={e => setIsPublished(e.target.checked)} /> Publish immediately</label></div><div className="flex justify-end"><Button type="submit" variant="primary">Create</Button></div></form></div>}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{semesterProjects.map(project => { const status = getStatus(project.id); return (<div key={project.id} onClick={() => onSelectProject && onSelectProject(project.id)} className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col justify-between hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700 transition-all cursor-pointer group"><div className="space-y-4"><div className="flex justify-between items-start"><span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-600 dark:text-slate-300">{project.code}</span>{user.role !== ROLES.STUDENT ? (project.is_published ? <span className="text-xs font-bold text-emerald-500">Published</span> : <span className="text-xs font-bold text-slate-400">Draft</span>) : (<span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${status === 'reviewed' ? 'bg-lime-100 text-lime-800' : 'bg-slate-100 text-slate-500'}`}>{status.replace('_', ' ')}</span>)}</div><h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{project.title}</h3></div></div>); })}</div>
+      )}
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {semesterProjects.map(project => { 
+              const status = getStatus(project.id); 
+              return (
+                  <div key={project.id} onClick={() => onSelectProject && onSelectProject(project.id)} className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col justify-between hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700 transition-all cursor-pointer group relative">
+                      <div className="space-y-4">
+                          <div className="flex justify-between items-start">
+                              <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-600 dark:text-slate-300">{project.code}</span>
+                              {user.role !== ROLES.STUDENT ? (
+                                  project.is_published ? <span className="text-xs font-bold text-emerald-500">Published</span> : <span className="text-xs font-bold text-slate-400">Draft</span>
+                              ) : (
+                                  <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${status === 'reviewed' ? 'bg-lime-100 text-lime-800' : 'bg-slate-100 text-slate-500'}`}>{status.replace('_', ' ')}</span>
+                              )}
+                          </div>
+                          <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{project.title}</h3>
+                      </div>
+                      
+                      {isAdminTech && (
+                          <div className="absolute bottom-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button onClick={(e) => startEdit(e, project)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/30 transition-colors" title="Edit">
+                                  <Edit2 size={14} />
+                              </button>
+                              <button onClick={(e) => handleDelete(e, project.id)} className="p-2 bg-slate-100 dark:bg-slate-800 rounded-full text-slate-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30 transition-colors" title="Delete">
+                                  <Trash2 size={14} />
+                              </button>
+                          </div>
+                      )}
+                  </div>
+              ); 
+          })}
+      </div>
     </div>
   );
 };
 
 export const ScheduleManager = () => {
-  const { scheduleItems, currentSemesterId, semesters, addScheduleItem } = useData();
+  const { scheduleItems, currentSemesterId, semesters, addScheduleItem, deleteScheduleItem } = useData();
   const { user } = useAuth();
   const currentSemester = semesters.find(s => s.id === currentSemesterId);
   const semesterItems = scheduleItems.filter(s => s.semester_id === currentSemesterId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -49,6 +141,8 @@ export const ScheduleManager = () => {
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemType, setNewItemType] = useState('due');
   const handleAdd = (e) => { e.preventDefault(); addScheduleItem({ semesterId: currentSemesterId, title: newItemTitle, date: newItemDate, type: newItemType }); setNewItemTitle(''); };
+  const handleDelete = (id) => { if(confirm('Delete this event?')) deleteScheduleItem(id); };
+  
   const getTypeStyle = (type) => { switch(type) { case 'due': return { bg: 'bg-pink-100 dark:bg-pink-900/30', text: 'text-pink-800 dark:text-pink-300', label: 'Due Date' }; case 'demo': return { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-800 dark:text-blue-300', label: 'Demo' }; default: return { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-800 dark:text-slate-300', label: type }; } };
 
   const isAdminTech = user.role === ROLES.ADMIN_TECH;
@@ -57,7 +151,7 @@ export const ScheduleManager = () => {
     <div className="space-y-6">
       <div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Schedule</h2><p className="text-slate-500 dark:text-slate-400">Timeline for {currentSemester?.name}</p></div>
       {isAdminTech && <div className="bg-white dark:bg-slate-900 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800"><form onSubmit={handleAdd} className="flex flex-col md:flex-row gap-3"><input type="date" value={newItemDate} onChange={(e) => setNewItemDate(e.target.value)} className="border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required /><select value={newItemType} onChange={(e) => setNewItemType(e.target.value)} className="border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"><option value="due">Due Date</option><option value="demo">Demo Day</option><option value="progress_check">Progress Check</option></select><input type="text" placeholder="Event Title" value={newItemTitle} onChange={(e) => setNewItemTitle(e.target.value)} className="border p-2 rounded text-sm flex-1 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required /><Button type="submit" variant="primary"><Plus size={16} /> Add</Button></form></div>}
-      <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">{semesterItems.map(item => { const style = getTypeStyle(item.type); const dateObj = new Date(item.date); return (<div key={item.id} className="p-4 flex items-center gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"><div className="w-16 text-center"><div className="text-xs font-bold text-slate-400 uppercase">{dateObj.toLocaleDateString('en-US', { month: 'short' })}</div><div className="text-xl font-bold text-slate-800 dark:text-slate-100">{dateObj.getDate()}</div></div><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${style.bg} ${style.text}`}>{style.label}</span></div><div className="font-bold text-slate-800 dark:text-slate-200">{item.title}</div></div></div>); })}</div>
+      <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden divide-y divide-slate-100 dark:divide-slate-800">{semesterItems.map(item => { const style = getTypeStyle(item.type); const dateObj = new Date(item.date); return (<div key={item.id} className="p-4 flex items-center gap-4 hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group"><div className="w-16 text-center"><div className="text-xs font-bold text-slate-400 uppercase">{dateObj.toLocaleDateString('en-US', { month: 'short' })}</div><div className="text-xl font-bold text-slate-800 dark:text-slate-100">{dateObj.getDate()}</div></div><div className="flex-1"><div className="flex items-center gap-2 mb-1"><span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider ${style.bg} ${style.text}`}>{style.label}</span></div><div className="font-bold text-slate-800 dark:text-slate-200">{item.title}</div></div>{isAdminTech && <button onClick={() => handleDelete(item.id)} className="p-2 text-slate-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"><Trash2 size={16}/></button>}</div>); })}</div>
     </div>
   );
 };

@@ -154,7 +154,7 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
       title: project.title,
       description: project.description,
       is_published: project.isPublished,
-      rubric_url: project.rubricUrl // Added field
+      rubric_url: project.rubricUrl
     };
     const { data, error } = await supabase.from('projects').insert([dbProject]).select();
     if (error) {
@@ -162,6 +162,26 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
        alert("Failed to add project. " + (error.code === '42501' ? "Permission denied." : error.message));
     }
     if (data) setProjects(prev => [...prev, data[0]]);
+  };
+  
+  const updateProject = async (id, updates) => {
+     if (!supabase) return;
+     const { data, error } = await supabase.from('projects').update(updates).eq('id', id).select();
+     if (error) {
+         alert("Update failed: " + error.message);
+         return;
+     }
+     if (data) setProjects(prev => prev.map(p => p.id === id ? data[0] : p));
+  };
+  
+  const deleteProject = async (id) => {
+    if (!supabase) return;
+    if (!confirm("Are you sure? This will delete all student progress associated with this project.")) return;
+    
+    // Note: Database should handle cascading deletes, but if not, we catch error
+    const { error } = await supabase.from('projects').delete().eq('id', id);
+    if (!error) setProjects(prev => prev.filter(p => p.id !== id));
+    else alert("Delete failed. You may need to delete associated student data first. Error: " + error.message);
   };
 
   const addScheduleItem = async (item) => {
@@ -178,6 +198,13 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
        alert("Failed to add item. " + (error.code === '42501' ? "Permission denied." : error.message));
     }
     if (data) setScheduleItems(prev => [...prev, data[0]].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+  };
+  
+  const deleteScheduleItem = async (id) => {
+      if (!supabase) return;
+      const { error } = await supabase.from('schedule_items').delete().eq('id', id);
+      if (!error) setScheduleItems(prev => prev.filter(i => i.id !== id));
+      else alert(error.message);
   };
   
   const addStudentToSemester = async (studentData, semesterId) => {
@@ -425,7 +452,7 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   return (
     <DataContext.Provider value={{ 
       semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates, notificationLogs, loading,
-      currentSemesterId, setCurrentSemesterId, addSemester, toggleSemesterStatus, addProject, addScheduleItem,
+      currentSemesterId, setCurrentSemesterId, addSemester, toggleSemesterStatus, addProject, updateProject, deleteProject, addScheduleItem, deleteScheduleItem,
       addStudentToSemester, joinSemester, removeStudentFromSemester, updateProfileRole, addCheckIn, updateProjectStatus, updateInstructorNotes,
       runDailyReminders, uploadFile, exportRosterToCSV
     }}>
