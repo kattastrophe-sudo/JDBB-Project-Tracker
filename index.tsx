@@ -49,6 +49,14 @@ const AppShell = () => {
   const handleInstructorSelectProject = (projectId, studentId) => { setSelectedProjectId(projectId); setSelectedStudentId(studentId); setCurrentView('project_detail'); };
 
   const renderView = () => {
+    // SECURITY GUARD: Strictly prevent Students from rendering Admin-only components
+    // This ensures even if currentView state is manipulated, data is not shown.
+    if (user.role === ROLES.STUDENT) {
+      if (['semesters', 'matrix', 'roster', 'settings'].includes(currentView)) {
+        return <StudentDashboard />;
+      }
+    }
+
     switch(currentView) {
       case 'dashboard': return user.role === ROLES.STUDENT ? <StudentDashboard /> : <AdminDashboard />;
       case 'semesters': return <SemesterManager />;

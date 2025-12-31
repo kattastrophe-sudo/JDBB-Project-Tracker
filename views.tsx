@@ -120,7 +120,10 @@ export const AdminDashboard = () => {
 export const ProjectDetail = ({ projectId, onBack, targetStudentId }) => {
   const { projects, scheduleItems, checkIns, addCheckIn, projectStates, updateProjectStatus, updateInstructorNotes, profiles } = useData();
   const { user } = useAuth();
-  const effectiveStudentId = targetStudentId || user.id;
+  
+  // SECURITY: If student, ignore targetStudentId and force own ID
+  const effectiveStudentId = user.role === ROLES.STUDENT ? user.id : (targetStudentId || user.id);
+  
   const isInstructorReview = !!targetStudentId && user.role !== ROLES.STUDENT;
   const project = projects.find(p => p.id === projectId);
   const relevantSchedule = scheduleItems.filter(s => s.projectId === projectId || s.type === 'critique').sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
@@ -162,16 +165,21 @@ export const ProjectDetail = ({ projectId, onBack, targetStudentId }) => {
 
 export const StudentProfile = ({ studentId, onBack, onSelectProject }) => {
   const { profiles, enrollments, projects, currentSemesterId, projectStates } = useData();
-  const student = profiles.find(p => p.id === studentId);
-  const enrollment = enrollments.find(e => e.profileId === studentId && e.semesterId === currentSemesterId);
+  const { user } = useAuth();
+  
+  // SECURITY: If student, force own ID
+  const effectiveStudentId = user.role === ROLES.STUDENT ? user.id : studentId;
+  
+  const student = profiles.find(p => p.id === effectiveStudentId);
+  const enrollment = enrollments.find(e => e.profileId === effectiveStudentId && e.semesterId === currentSemesterId);
   const semesterProjects = projects.filter(p => p.semesterId === currentSemesterId);
   if (!student || !enrollment) return <div>Student not found in this semester.</div>;
-  const getStatus = (projectId) => projectStates.find(s => s.projectId === projectId && s.studentId === studentId)?.status || 'not_started';
+  const getStatus = (projectId) => projectStates.find(s => s.projectId === projectId && s.studentId === effectiveStudentId)?.status || 'not_started';
 
   return (
     <div className="space-y-8">
        <div className="flex flex-col md:flex-row gap-6 items-start"><button onClick={onBack} className="mt-1 p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"><ArrowLeft size={20} className="text-slate-600 dark:text-slate-300" /></button><div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex-1 w-full relative overflow-hidden"><div className="relative z-10 flex items-center gap-6"><div className="w-20 h-20 rounded-lg bg-slate-800 text-white flex flex-col items-center justify-center font-bold shadow-lg" style={{ backgroundColor: COLORS.dustyGrape }}><span className="text-xs uppercase tracking-widest opacity-70">Tag</span><span className="text-3xl font-mono">{enrollment.tagNumber}</span></div><div><h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{student.fullName}</h1><div className="flex flex-col sm:flex-row gap-2 sm:gap-4 text-sm text-slate-500 dark:text-slate-400 mt-1"><span className="flex items-center gap-1"><Shield size={14}/> {enrollment.studentNumber}</span><span className="flex items-center gap-1"><Send size={14}/> {student.email}</span></div></div></div></div></div>
-       <div><h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2"><Layout size={20} className="text-slate-400" /> Project Status</h3><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{semesterProjects.map(project => { const status = getStatus(project.id); return (<button key={project.id} onClick={() => onSelectProject(project.id, studentId)} className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-emerald-400 dark:hover:border-emerald-600 transition-colors group relative overflow-hidden"><div className="flex justify-between items-start mb-2"><span className="text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded">{project.code}</span><span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${status === 'reviewed' ? 'bg-lime-100 text-lime-800' : status === 'submitted' ? 'bg-purple-100 text-purple-800' : status === 'in_progress' ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-500'}`}>{status.replace('_', ' ')}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{project.title}</h4></button>); })}</div></div>
+       <div><h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2"><Layout size={20} className="text-slate-400" /> Project Status</h3><div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{semesterProjects.map(project => { const status = getStatus(project.id); return (<button key={project.id} onClick={() => onSelectProject(project.id, effectiveStudentId)} className="text-left bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-4 hover:border-emerald-400 dark:hover:border-emerald-600 transition-colors group relative overflow-hidden"><div className="flex justify-between items-start mb-2"><span className="text-xs font-bold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 px-2 py-0.5 rounded">{project.code}</span><span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ${status === 'reviewed' ? 'bg-lime-100 text-lime-800' : status === 'submitted' ? 'bg-purple-100 text-purple-800' : status === 'in_progress' ? 'bg-cyan-100 text-cyan-800' : 'bg-slate-100 text-slate-500'}`}>{status.replace('_', ' ')}</span></div><h4 className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{project.title}</h4></button>); })}</div></div>
     </div>
   );
 };
