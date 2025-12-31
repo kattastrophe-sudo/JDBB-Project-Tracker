@@ -155,7 +155,7 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
       title: project.title,
       description: project.description,
       is_published: project.isPublished,
-      rubric_url: project.rubricUrl
+      rubric_url: project.rubricUrl || null
     };
     const { data, error } = await supabase.from('projects').insert([dbProject]).select();
     if (error) {
@@ -171,7 +171,12 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   
   const updateProject = async (id, updates) => {
      if (!supabase) return { success: false, error: { message: "Database not connected" } };
-     const { data, error } = await supabase.from('projects').update(updates).eq('id', id).select();
+     
+     // Clean empty string rubric_url to null
+     const cleanUpdates = { ...updates };
+     if (cleanUpdates.rubric_url === '') cleanUpdates.rubric_url = null;
+
+     const { data, error } = await supabase.from('projects').update(cleanUpdates).eq('id', id).select();
      if (error) {
          console.error("Update Project Error:", error.message || error);
          return { success: false, error };
