@@ -41,9 +41,14 @@ export const ProjectManager = ({ onSelectProject }) => {
       window.scrollTo(0,0);
   };
   
-  const handleDelete = (e, id) => {
+  const handleDelete = async (e, id) => {
       e.stopPropagation();
-      deleteProject(id);
+      if (!confirm("Are you sure? This will delete all student progress associated with this project.")) return;
+      
+      const result = await deleteProject(id);
+      if (!result.success) {
+          alert("Delete failed: " + (result.error?.message || "Unknown error"));
+      }
   };
 
   const handleSubmit = async (e) => { 
@@ -70,17 +75,17 @@ export const ProjectManager = ({ onSelectProject }) => {
       }
       
       if (result && !result.success) {
-          const msg = result.error?.message || JSON.stringify(result.error);
-          const code = result.error?.code;
+          let msg = "Unknown error";
+          const err = result.error;
           
-          if (code === '23505') {
-              alert("Failed: A project with this Code already exists in this semester.");
-          } else if (code === '42501') {
-              alert("Failed: Permission denied. Ensure you are an Admin Technologist.");
-          } else {
-              alert("Failed: " + msg);
+          if (err) {
+              if (err.code === '23505') msg = "A project with this Code already exists in this semester.";
+              else if (err.code === '42501') msg = "Permission denied. Ensure you are an Admin Technologist.";
+              else msg = err.message || err.details || JSON.stringify(err);
           }
-          return; // Do not close form on error
+          
+          alert("Failed: " + msg);
+          return; 
       }
       
       setIsFormOpen(false); 
@@ -157,8 +162,25 @@ export const ScheduleManager = () => {
   const [newItemDate, setNewItemDate] = useState('');
   const [newItemTitle, setNewItemTitle] = useState('');
   const [newItemType, setNewItemType] = useState('due');
-  const handleAdd = (e) => { e.preventDefault(); addScheduleItem({ semesterId: currentSemesterId, title: newItemTitle, date: newItemDate, type: newItemType }); setNewItemTitle(''); };
-  const handleDelete = (id) => { if(confirm('Delete this event?')) deleteScheduleItem(id); };
+  
+  const handleAdd = async (e) => { 
+      e.preventDefault(); 
+      const result = await addScheduleItem({ semesterId: currentSemesterId, title: newItemTitle, date: newItemDate, type: newItemType }); 
+      if (!result.success) {
+          alert("Error adding item: " + (result.error?.message || "Unknown error"));
+          return;
+      }
+      setNewItemTitle(''); 
+  };
+  
+  const handleDelete = async (id) => { 
+      if(confirm('Delete this event?')) {
+          const result = await deleteScheduleItem(id);
+          if (!result.success) {
+              alert("Error deleting item: " + (result.error?.message || "Unknown error"));
+          }
+      } 
+  };
   
   const getTypeStyle = (type) => { switch(type) { case 'due': return { bg: 'bg-pink-100 dark:bg-pink-900/30', text: 'text-pink-800 dark:text-pink-300', label: 'Due Date' }; case 'demo': return { bg: 'bg-blue-100 dark:bg-blue-900/30', text: 'text-blue-800 dark:text-blue-300', label: 'Demo' }; default: return { bg: 'bg-slate-100 dark:bg-slate-800', text: 'text-slate-800 dark:text-slate-300', label: type }; } };
 

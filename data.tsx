@@ -129,13 +129,14 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   // --- ACTIONS ---
 
   const addSemester = async (sem) => {
-    if (!supabase) return;
+    if (!supabase) return { success: false, error: 'No connection' };
     const { data, error } = await supabase.from('semesters').insert([sem]).select();
     if (error) {
-       console.error("Add Semester Error:", error);
-       alert("Failed to add semester. If you are an admin, check Settings > Developer Tools to fix permissions.");
+       console.error("Add Semester Error:", error.message);
+       return { success: false, error };
     }
     if (data) setSemesters(prev => [...prev, data[0]]);
+    return { success: true };
   };
 
   const toggleSemesterStatus = async (id) => {
@@ -158,7 +159,7 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
     };
     const { data, error } = await supabase.from('projects').insert([dbProject]).select();
     if (error) {
-       console.error("Add Project Error:", error);
+       console.error("Add Project Error:", error.message || error);
        return { success: false, error };
     }
     if (data) {
@@ -172,7 +173,7 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
      if (!supabase) return { success: false, error: { message: "Database not connected" } };
      const { data, error } = await supabase.from('projects').update(updates).eq('id', id).select();
      if (error) {
-         console.error("Update Project Error:", error);
+         console.error("Update Project Error:", error.message || error);
          return { success: false, error };
      }
      if (data) {
@@ -183,17 +184,19 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   };
   
   const deleteProject = async (id) => {
-    if (!supabase) return;
-    if (!confirm("Are you sure? This will delete all student progress associated with this project.")) return;
+    if (!supabase) return { success: false, error: { message: "No connection" } };
     
-    // Note: Database should handle cascading deletes, but if not, we catch error
     const { error } = await supabase.from('projects').delete().eq('id', id);
-    if (!error) setProjects(prev => prev.filter(p => p.id !== id));
-    else alert("Delete failed. You may need to delete associated student data first. Error: " + error.message);
+    if (error) {
+        return { success: false, error };
+    }
+    
+    setProjects(prev => prev.filter(p => p.id !== id));
+    return { success: true };
   };
 
   const addScheduleItem = async (item) => {
-    if (!supabase) return;
+    if (!supabase) return { success: false, error: { message: "No connection" } };
     const dbItem = {
       semester_id: item.semesterId,
       title: item.title,
@@ -202,17 +205,19 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
     };
     const { data, error } = await supabase.from('schedule_items').insert([dbItem]).select();
     if (error) {
-       console.error("Add Schedule Item Error:", error);
-       alert("Failed to add item. " + (error.code === '42501' ? "Permission denied." : error.message));
+       console.error("Add Schedule Item Error:", error.message || error);
+       return { success: false, error };
     }
     if (data) setScheduleItems(prev => [...prev, data[0]].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+    return { success: true };
   };
   
   const deleteScheduleItem = async (id) => {
-      if (!supabase) return;
+      if (!supabase) return { success: false, error: { message: "No connection" } };
       const { error } = await supabase.from('schedule_items').delete().eq('id', id);
-      if (!error) setScheduleItems(prev => prev.filter(i => i.id !== id));
-      else alert(error.message);
+      if (error) return { success: false, error };
+      setScheduleItems(prev => prev.filter(i => i.id !== id));
+      return { success: true };
   };
   
   const addStudentToSemester = async (studentData, semesterId) => {
