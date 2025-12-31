@@ -294,6 +294,27 @@ export const DataProvider = ({ children }) => {
     setEnrollments(prev => prev.filter(e => e.id !== enrollmentId));
   };
   
+  const updateProfileRole = async (userId, newRole) => {
+    if (!supabase) return { success: false, error: "No connection" };
+    try {
+        const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
+        if (error) {
+            // Check for RLS Policy violation (Code 42501)
+             if (error.code === '42501') {
+                 return { success: false, error: "Permission Denied: You are not authorized to change user roles." };
+             }
+             throw error;
+        }
+        
+        // Optimistic update
+        setProfiles(prev => prev.map(p => p.id === userId ? { ...p, role: newRole } : p));
+        
+        return { success: true };
+    } catch (e: any) {
+        return { success: false, error: e.message || "Failed to update role" };
+    }
+  };
+  
   const addCheckIn = async (checkIn) => {
     if (!supabase) return;
     const dbCheckIn = {
@@ -355,7 +376,7 @@ export const DataProvider = ({ children }) => {
     <DataContext.Provider value={{ 
       semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates, notificationLogs, loading,
       currentSemesterId, setCurrentSemesterId, addSemester, toggleSemesterStatus, addProject, addScheduleItem,
-      addStudentToSemester, removeStudentFromSemester, addCheckIn, updateProjectStatus, updateInstructorNotes,
+      addStudentToSemester, removeStudentFromSemester, updateProfileRole, addCheckIn, updateProjectStatus, updateInstructorNotes,
       runDailyReminders
     }}>
       {children}

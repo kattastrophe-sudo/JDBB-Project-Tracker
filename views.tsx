@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useData, useAuth, COLORS, ROLES } from './data';
 import { Button } from './components';
-import { ArrowLeft, Clock, Layout, Calendar, AlertTriangle, AlertCircle, Settings, Camera, CheckCircle, Lock, FileText, Send, User, Users, Shield, Filter, X, Plus, Archive, Power, Play, Mail, UserPlus, Trash2, Download, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Clock, Layout, Calendar, AlertTriangle, AlertCircle, Settings, Camera, CheckCircle, Lock, FileText, Send, User, Users, Shield, Filter, X, Plus, Archive, Power, Play, Mail, UserPlus, Trash2, Download, HelpCircle, Edit } from 'lucide-react';
 
 export const StudentDashboard = () => {
   const { currentSemesterId, semesters, scheduleItems, projects, projectStates } = useData();
@@ -236,21 +236,26 @@ export const AdminSettings = () => {
 };
 
 export const RosterManager = ({ onSelectStudent }) => {
-  const { profiles, enrollments, currentSemesterId, semesters, addStudentToSemester, removeStudentFromSemester } = useData();
+  const { profiles, enrollments, currentSemesterId, semesters, addStudentToSemester, removeStudentFromSemester, updateProfileRole } = useData();
   const { user } = useAuth();
   const currentSemester = semesters.find(s => s.id === currentSemesterId);
+  const [viewMode, setViewMode] = useState('roster'); // 'roster' or 'directory'
   const [isAdding, setIsAdding] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [newStudentNum, setNewStudentNum] = useState('');
-  const [newName, setNewName] = useState(''); // Note: Name is not stored in enrollments, only profiles. This input is for reference.
+  const [newName, setNewName] = useState('');
   const [newEmail, setNewEmail] = useState('');
-  const semesterEnrollments = enrollments.filter(e => e.semesterId === currentSemesterId);
-  // Sort enrollments (handles missing profiles for pending users)
-  const rosterData = semesterEnrollments.map(enrollment => ({ ...enrollment, profile: profiles.find(p => p.id === enrollment.profileId) })).sort((a, b) => parseInt(a.tagNumber) - parseInt(b.tagNumber));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   
   const isAdminTech = user.role === ROLES.ADMIN_TECH;
+
+  const semesterEnrollments = useMemo(() => 
+    enrollments.filter(e => e.semesterId === currentSemesterId)
+    .sort((a, b) => parseInt(a.tagNumber) - parseInt(b.tagNumber)), 
+  [enrollments, currentSemesterId]);
+
+  const allUsers = useMemo(() => profiles.sort((a,b) => (a.fullName || a.email).localeCompare(b.fullName || b.email)), [profiles]);
 
   const handleAddStudent = async (e) => { 
       e.preventDefault(); 
@@ -267,10 +272,38 @@ export const RosterManager = ({ onSelectStudent }) => {
       }
   };
 
+  const startEnrollment = (userProfile) => {
+      setNewName(userProfile.fullName);
+      setNewEmail(userProfile.email);
+      setNewStudentNum('');
+      setNewTag('');
+      setIsAdding(true);
+      setViewMode('roster');
+      window.scrollTo(0,0);
+  };
+  
+  const handleRoleChange = async (userId, newRole) => {
+      const result = await updateProfileRole(userId, newRole);
+      if (!result.success) {
+          alert(result.error); // Simple alert for now, can be improved
+      }
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center"><div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Student Roster</h2><p className="text-slate-500">Students with "Pending" status need to Create an Account.</p></div>{isAdminTech && <Button variant="primary" onClick={() => { setIsAdding(!isAdding); setErrorMsg(''); }}>{isAdding ? 'Cancel' : <><UserPlus size={18} /> Add Student</>}</Button>}</div>
+      <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
+          <div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Student Roster</h2><p className="text-slate-500">Manage enrollments for {currentSemester?.name}</p></div>
+          <div className="flex gap-2">
+            <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                <button onClick={() => setViewMode('roster')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-colors ${viewMode === 'roster' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}>Roster</button>
+                <button onClick={() => setViewMode('directory')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-colors ${viewMode === 'directory' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}>User Directory</button>
+            </div>
+            {isAdminTech && <Button variant="primary" onClick={() => { setIsAdding(!isAdding); setErrorMsg(''); setNewName(''); setNewEmail(''); }}>{isAdding ? 'Cancel' : <><UserPlus size={18} /> Add Student</>}</Button>}
+          </div>
+      </div>
+
       {isAdding && isAdminTech && <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50 animate-in fade-in slide-in-from-top-2 duration-300">
+        <h3 className="font-bold text-emerald-600 dark:text-emerald-400 mb-4 flex items-center gap-2"><UserPlus size={18}/> Enroll Student into {currentSemester?.name}</h3>
         <form onSubmit={handleAddStudent} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tag #</label><input type="text" maxLength={2} value={newTag} onChange={e => setNewTag(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:border-emerald-500 outline-none" required placeholder="01" /></div>
@@ -281,7 +314,74 @@ export const RosterManager = ({ onSelectStudent }) => {
             {errorMsg && <div className="text-red-500 text-sm font-bold flex items-center gap-2"><AlertCircle size={16} /> {errorMsg}</div>}
         </form>
       </div>}
-      <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden"><table className="w-full text-left"><thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700"><tr><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase w-24 text-center">Tag #</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Student</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Status</th>{isAdminTech && <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase text-right">Actions</th>}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{rosterData.map((record) => { const isPending = !record.profileId; return (<tr key={record.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"><td className="px-6 py-4 text-center cursor-pointer font-mono text-slate-600 dark:text-slate-300" onClick={() => !isPending && onSelectStudent && onSelectStudent(record.profileId)}>{record.tagNumber}</td><td className="px-6 py-4 cursor-pointer" onClick={() => !isPending && onSelectStudent && onSelectStudent(record.profileId)}><div className="font-bold text-slate-800 dark:text-slate-200">{record.profile?.fullName || <span className="text-slate-400 italic">No Account Created</span>}</div><div className="text-xs text-slate-500">{record.email || record.profile?.email}</div></td><td className="px-6 py-4">{isPending ? <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2 py-1 rounded-full inline-flex items-center gap-1"><HelpCircle size={10} /> Pending Sign Up</span> : <span className="text-xs font-bold bg-green-100 text-green-800 px-2 py-1 rounded-full inline-flex items-center gap-1"><CheckCircle size={10} /> Active</span>}</td>{isAdminTech && <td className="px-6 py-4 text-right"><button onClick={() => removeStudentFromSemester(record.id)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={16} /></button></td>}</tr>); })}</tbody></table></div>
+
+      {viewMode === 'roster' && (
+        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden"><table className="w-full text-left"><thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700"><tr><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase w-24 text-center">Tag #</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Student</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Status</th>{isAdminTech && <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase text-right">Actions</th>}</tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{semesterEnrollments.map((record) => { 
+            const profile = profiles.find(p => p.id === record.profileId);
+            const isPending = !record.profileId; 
+            return (
+                <tr key={record.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                    <td className="px-6 py-4 text-center cursor-pointer font-mono text-slate-600 dark:text-slate-300" onClick={() => !isPending && onSelectStudent && onSelectStudent(record.profileId)}>{record.tagNumber}</td>
+                    <td className="px-6 py-4 cursor-pointer" onClick={() => !isPending && onSelectStudent && onSelectStudent(record.profileId)}>
+                        <div className="font-bold text-slate-800 dark:text-slate-200">{profile?.fullName || <span className="text-slate-400 italic">No Account Created</span>}</div>
+                        <div className="text-xs text-slate-500">{record.email || profile?.email}</div>
+                    </td>
+                    <td className="px-6 py-4">{isPending ? <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2 py-1 rounded-full inline-flex items-center gap-1"><HelpCircle size={10} /> Pending Sign Up</span> : <span className="text-xs font-bold bg-green-100 text-green-800 px-2 py-1 rounded-full inline-flex items-center gap-1"><CheckCircle size={10} /> Active</span>}</td>
+                    {isAdminTech && <td className="px-6 py-4 text-right"><button onClick={() => removeStudentFromSemester(record.id)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={16} /></button></td>}
+                </tr>
+            ); 
+        })}</tbody></table></div>
+      )}
+
+      {viewMode === 'directory' && (
+         <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+             <div className="p-4 bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-slate-700 text-sm text-slate-500">
+                 All registered users in the system. Use this list to approve new accounts and assign roles.
+             </div>
+             <table className="w-full text-left">
+                 <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
+                     <tr>
+                         <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">User</th>
+                         <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">System Role</th>
+                         <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase text-right">Action</th>
+                     </tr>
+                 </thead>
+                 <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                     {allUsers.map((profile) => {
+                         const isEnrolled = semesterEnrollments.some(e => e.profileId === profile.id);
+                         return (
+                             <tr key={profile.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                 <td className="px-6 py-4">
+                                     <div className="font-bold text-slate-800 dark:text-slate-200">{profile.fullName}</div>
+                                     <div className="text-xs text-slate-500">{profile.email}</div>
+                                 </td>
+                                 <td className="px-6 py-4">
+                                     <select 
+                                        value={profile.role} 
+                                        onChange={(e) => handleRoleChange(profile.id, e.target.value)}
+                                        disabled={!isAdminTech}
+                                        className="text-xs font-medium bg-slate-100 dark:bg-slate-800 border-none rounded px-2 py-1 outline-none focus:ring-2 focus:ring-emerald-500 cursor-pointer"
+                                     >
+                                        <option value={ROLES.STUDENT}>Student</option>
+                                        <option value={ROLES.MONITOR}>Monitor</option>
+                                        <option value={ROLES.ADMIN_INSTRUCTOR}>Instructor</option>
+                                        <option value={ROLES.ADMIN_TECH}>Technologist</option>
+                                     </select>
+                                 </td>
+                                 <td className="px-6 py-4 text-right">
+                                     {isEnrolled ? (
+                                         <span className="text-xs font-bold text-emerald-500 flex items-center justify-end gap-1"><CheckCircle size={14}/> Enrolled</span>
+                                     ) : (
+                                         <Button variant="outline" onClick={() => startEnrollment(profile)} className="text-xs h-8">Enroll</Button>
+                                     )}
+                                 </td>
+                             </tr>
+                         );
+                     })}
+                 </tbody>
+             </table>
+         </div>
+      )}
     </div>
   );
 };
