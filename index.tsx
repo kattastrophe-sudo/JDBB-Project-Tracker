@@ -1,6 +1,6 @@
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, createContext, useContext, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle } from 'lucide-react';
+import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, ChevronRight, MoreHorizontal } from 'lucide-react';
 
 // --- JDBB Design System & Constants ---
 
@@ -23,6 +23,88 @@ const ROLES = {
   STUDENT: 'Student',
 };
 
+// --- Types (Plan Section 5) ---
+
+interface Semester {
+  id: string;
+  name: string; // e.g., "Winter 2026 – Modelmaking"
+  courseCode: string;
+  isActive: boolean;
+  startDate: string;
+}
+
+interface Project {
+  id: string;
+  semesterId: string;
+  code: string; // "P1"
+  title: string;
+  isPublished: boolean;
+}
+
+interface ScheduleItem {
+  id: string;
+  semesterId: string;
+  title: string;
+  date: string;
+  type: 'assigned' | 'demo' | 'progress_check' | 'lab_day' | 'due' | 'critique';
+}
+
+// --- Mock Data Context ---
+
+interface DataContextType {
+  semesters: Semester[];
+  projects: Project[];
+  scheduleItems: ScheduleItem[];
+  currentSemesterId: string;
+  setCurrentSemesterId: (id: string) => void;
+  addSemester: (sem: Omit<Semester, 'id'>) => void;
+}
+
+const DataContext = createContext<DataContextType | null>(null);
+
+const initialSemesters: Semester[] = [
+  { id: 'sem-1', name: 'Winter 2026 – Modelmaking & Casting', courseCode: 'JJEW-100', isActive: true, startDate: '2026-01-08' },
+  { id: 'sem-2', name: 'Fall 2025 – Fabrication 1', courseCode: 'JJEW-100', isActive: false, startDate: '2025-09-05' },
+];
+
+const initialProjects: Project[] = [
+  { id: 'p-1', semesterId: 'sem-1', code: 'P1', title: 'Orthographic Rendering', isPublished: true },
+  { id: 'p-2', semesterId: 'sem-1', code: 'P2', title: 'Wax Carving Basics', isPublished: true },
+  { id: 'p-3', semesterId: 'sem-1', code: 'P3', title: 'Lost Wax Casting', isPublished: false },
+];
+
+const initialSchedule: ScheduleItem[] = [
+  { id: 's-1', semesterId: 'sem-1', title: 'P1 Due Date', date: '2026-02-01', type: 'due' },
+  { id: 's-2', semesterId: 'sem-1', title: 'P2 Demo Day', date: '2026-02-03', type: 'demo' },
+];
+
+const DataProvider = ({ children }: { children: React.ReactNode }) => {
+  const [semesters, setSemesters] = useState<Semester[]>(initialSemesters);
+  const [projects, setProjects] = useState<Project[]>(initialProjects);
+  const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>(initialSchedule);
+  const [currentSemesterId, setCurrentSemesterId] = useState<string>('sem-1');
+
+  const addSemester = (sem: Omit<Semester, 'id'>) => {
+    const newSem = { ...sem, id: `sem-${Date.now()}` };
+    setSemesters([...semesters, newSem]);
+  };
+
+  return (
+    <DataContext.Provider value={{ 
+      semesters, projects, scheduleItems, 
+      currentSemesterId, setCurrentSemesterId, addSemester 
+    }}>
+      {children}
+    </DataContext.Provider>
+  );
+};
+
+const useData = () => {
+  const ctx = useContext(DataContext);
+  if (!ctx) throw new Error("useData must be used within DataProvider");
+  return ctx;
+};
+
 // --- Mock Auth Context (MVP Step 2) ---
 
 const AuthContext = createContext(null);
@@ -31,7 +113,6 @@ const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState(null);
 
   const login = (role) => {
-    // Simulating user data based on role
     setUser({
       id: '123-uuid',
       name: role === ROLES.STUDENT ? 'Alex Student (Tag 04)' : `JDBB Staff (${role})`,
@@ -62,15 +143,14 @@ interface ButtonProps {
 }
 
 const Button = ({ children, onClick, variant = 'primary', className = '', fullWidth = false }: ButtonProps) => {
-  const baseStyle = "px-4 py-2 rounded-md font-medium transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm";
+  const baseStyle = "px-4 py-2 rounded-md font-medium transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm text-sm";
   const widthClass = fullWidth ? "w-full" : "";
   
-  // Design System Mapping
   const styles: Record<string, React.CSSProperties> = {
-    primary: { backgroundColor: COLORS.emerald, color: 'white' }, // Primary Actions
-    secondary: { backgroundColor: COLORS.dustyGrape, color: 'white' }, // Structural Actions
-    outline: { border: `2px solid ${COLORS.pacificCyan}`, color: COLORS.pacificCyan, backgroundColor: 'transparent' }, // Info/Neutral
-    danger: { backgroundColor: COLORS.vintageGrape, color: 'white' }, // Alerts
+    primary: { backgroundColor: COLORS.emerald, color: 'white' },
+    secondary: { backgroundColor: COLORS.dustyGrape, color: 'white' },
+    outline: { border: `2px solid ${COLORS.pacificCyan}`, color: COLORS.pacificCyan, backgroundColor: 'transparent' },
+    danger: { backgroundColor: COLORS.vintageGrape, color: 'white' },
     ghost: { backgroundColor: 'transparent', color: COLORS.textLight, boxShadow: 'none' }
   };
 
@@ -85,7 +165,7 @@ const Button = ({ children, onClick, variant = 'primary', className = '', fullWi
   );
 };
 
-// --- Login Screen (Simulation) ---
+// --- Login Screen ---
 
 const LoginScreen = () => {
   const { login } = useAuth();
@@ -119,6 +199,227 @@ const LoginScreen = () => {
             </Button>
           </div>
         </div>
+      </div>
+    </div>
+  );
+};
+
+// --- View: Semesters (Admin) ---
+
+const SemesterList = () => {
+  const { semesters, setCurrentSemesterId, currentSemesterId } = useData();
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Semesters</h2>
+          <p className="text-slate-500">Manage course instances and archives.</p>
+        </div>
+        <Button variant="primary">
+          <Plus size={18} /> New Semester
+        </Button>
+      </div>
+
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+        <table className="w-full text-left">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Name</th>
+              <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Course Code</th>
+              <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Status</th>
+              <th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase tracking-wider">Actions</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {semesters.map((sem) => (
+              <tr key={sem.id} className="hover:bg-slate-50 transition-colors">
+                <td className="px-6 py-4 font-medium text-slate-800">{sem.name}</td>
+                <td className="px-6 py-4 text-slate-500">{sem.courseCode}</td>
+                <td className="px-6 py-4">
+                  {sem.isActive ? (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800" style={{ backgroundColor: '#e6f7e6', color: '#2d6a4f' }}>
+                      Active
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-800">
+                      Archived
+                    </span>
+                  )}
+                </td>
+                <td className="px-6 py-4">
+                  {currentSemesterId !== sem.id && (
+                     <Button 
+                       variant="outline" 
+                       onClick={() => setCurrentSemesterId(sem.id)}
+                       className="text-xs py-1 h-8"
+                     >
+                       Select
+                     </Button>
+                  )}
+                  {currentSemesterId === sem.id && (
+                    <span className="text-xs font-bold text-slate-400 flex items-center gap-1">
+                      <CheckCircle size={14} /> Selected
+                    </span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
+
+// --- View: Projects (Admin) ---
+
+const ProjectManager = () => {
+  const { projects, currentSemesterId, semesters } = useData();
+  
+  const currentSemester = semesters.find(s => s.id === currentSemesterId);
+  const semesterProjects = projects.filter(p => p.semesterId === currentSemesterId);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h2 className="text-2xl font-bold text-slate-800">Projects</h2>
+          <p className="text-slate-500">{currentSemester?.name}</p>
+        </div>
+        <Button variant="primary">
+          <Plus size={18} /> New Project
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {semesterProjects.map(project => (
+          <div key={project.id} className="bg-white rounded-lg shadow-sm border border-slate-200 p-6 flex flex-col justify-between hover:shadow-md transition-shadow">
+            <div className="space-y-4">
+              <div className="flex justify-between items-start">
+                <span className="px-2 py-1 bg-slate-100 rounded text-xs font-bold text-slate-600">{project.code}</span>
+                {project.isPublished ? (
+                  <span className="text-xs font-bold" style={{ color: COLORS.emerald }}>Published</span>
+                ) : (
+                  <span className="text-xs font-bold text-slate-400">Draft</span>
+                )}
+              </div>
+              <h3 className="text-lg font-bold text-slate-800">{project.title}</h3>
+            </div>
+            
+            <div className="pt-6 mt-4 border-t border-slate-100 flex gap-2">
+               <Button variant="secondary" fullWidth className="text-xs">
+                 Edit
+               </Button>
+               <Button variant="ghost" className="text-xs px-2">
+                 <MoreHorizontal size={16} />
+               </Button>
+            </div>
+          </div>
+        ))}
+        
+        {/* Empty State / Add New Card */}
+        <button className="border-2 border-dashed border-slate-200 rounded-lg p-6 flex flex-col items-center justify-center text-slate-400 hover:border-emerald-300 hover:text-emerald-500 transition-colors group h-full min-h-[200px]">
+          <Plus size={32} className="mb-2 group-hover:scale-110 transition-transform" />
+          <span className="font-medium">Add Project</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// --- View Content ---
+
+const StudentDashboard = () => {
+  const { currentSemesterId, semesters, scheduleItems } = useData();
+  const currentSemester = semesters.find(s => s.id === currentSemesterId);
+  const upcomingItems = scheduleItems.filter(s => s.semesterId === currentSemesterId);
+
+  return (
+    <div className="space-y-6">
+      {/* Welcome Banner */}
+      <div className="bg-white p-6 rounded-lg shadow-sm border-l-4" style={{ borderLeftColor: COLORS.pacificCyan }}>
+        <h2 className="text-xl font-bold text-slate-800">Hello, Alex.</h2>
+        <p className="text-slate-500">
+           {currentSemester ? `Welcome to ${currentSemester.name}.` : "No active semester selected."}
+        </p>
+      </div>
+
+      <div className="grid md:grid-cols-2 gap-6">
+        {/* Next Up Card */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="p-4 font-bold flex items-center gap-2 text-white" style={{ backgroundColor: COLORS.vintageGrape }}>
+            <AlertCircle size={20} />
+            Next Up
+          </div>
+          <div className="p-4 space-y-4">
+             {upcomingItems.length > 0 ? upcomingItems.map(item => (
+                <div key={item.id} className="p-3 bg-slate-50 border-l-4 border-slate-300 rounded text-sm flex justify-between items-center">
+                   <div>
+                     <div className="font-bold text-slate-800">{item.title}</div>
+                     <div className="text-slate-600 text-xs uppercase font-bold tracking-wide">{item.type.replace('_', ' ')}</div>
+                   </div>
+                   <div className="text-slate-500 text-xs text-right">
+                     {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                   </div>
+                </div>
+             )) : (
+               <div className="text-slate-400 text-center py-4">No upcoming items.</div>
+             )}
+          </div>
+        </div>
+
+        {/* Action Card */}
+        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="p-4 font-bold border-b border-slate-100 text-slate-800">
+            Quick Actions
+          </div>
+          <div className="p-6 flex flex-col gap-3">
+            <p className="text-sm text-slate-500 mb-2">Upload photos from your phone directly to your project log.</p>
+            <Button variant="primary" fullWidth>
+              <Calendar size={18} /> View P1 Timeline
+            </Button>
+            <Button variant="outline" fullWidth>
+              View My Grades / Status
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const AdminDashboard = () => {
+  const { currentSemesterId, semesters, projects } = useData();
+  const currentSemester = semesters.find(s => s.id === currentSemesterId);
+  const semesterProjects = projects.filter(p => p.semesterId === currentSemesterId);
+
+  return (
+    <div className="space-y-6">
+       <div className="bg-white p-6 rounded-lg shadow-sm border-l-4" style={{ borderLeftColor: COLORS.dustyGrape }}>
+        <h2 className="text-xl font-bold text-slate-800">Semester Overview</h2>
+        {currentSemester ? (
+           <p className="text-slate-500">{currentSemester.name} • {semesterProjects.length} Projects Active</p>
+        ) : (
+           <p className="text-slate-500">No active semester selected.</p>
+        )}
+      </div>
+      
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Stat Cards */}
+        {[
+          { label: 'Pending Reviews', val: '8', color: COLORS.emerald },
+          { label: 'Overdue Students', val: '3', color: COLORS.vintageGrape },
+          { label: 'Days Until Critique', val: '12', color: COLORS.pacificCyan },
+        ].map((stat) => (
+          <div key={stat.label} className="bg-white p-6 rounded-lg shadow-sm flex items-center justify-between">
+            <div>
+              <div className="text-3xl font-bold" style={{ color: stat.color }}>{stat.val}</div>
+              <div className="text-sm text-slate-500 font-medium">{stat.label}</div>
+            </div>
+            <div className="h-10 w-1 rounded-full bg-slate-100"></div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -165,27 +466,27 @@ const Navbar = ({ toggleSidebar }) => {
   );
 };
 
-const Sidebar = ({ isOpen, close }) => {
+const Sidebar = ({ isOpen, close, currentView, setView }) => {
   const { user } = useAuth();
+  const { currentSemesterId, semesters } = useData();
+  const currentSemester = semesters.find(s => s.id === currentSemesterId);
   
-  // Menu configuration based on permissions matrix
+  // Navigation Items with View IDs
   const menuItems = [
     { 
+      id: 'dashboard',
       label: 'Dashboard', 
       icon: Layout, 
       roles: [ROLES.ADMIN_TECH, ROLES.ADMIN_INSTRUCTOR, ROLES.MONITOR, ROLES.STUDENT] 
     },
     { 
+      id: 'projects',
       label: 'Projects', 
       icon: Calendar, 
       roles: [ROLES.ADMIN_TECH, ROLES.ADMIN_INSTRUCTOR, ROLES.MONITOR, ROLES.STUDENT] 
     },
     { 
-      label: 'Student Progress', 
-      icon: Users, 
-      roles: [ROLES.ADMIN_TECH, ROLES.ADMIN_INSTRUCTOR, ROLES.MONITOR] 
-    },
-    { 
+      id: 'semesters',
       label: 'Semesters', 
       icon: Shield, 
       roles: [ROLES.ADMIN_TECH] 
@@ -208,10 +509,13 @@ const Sidebar = ({ isOpen, close }) => {
         <nav className="p-4 space-y-1 flex-1">
           {allowedItems.map((item) => (
             <button
-              key={item.label}
-              className="flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors text-slate-600 hover:bg-slate-50 hover:text-slate-900 group"
+              key={item.id}
+              onClick={() => { setView(item.id); close(); }}
+              className={`flex items-center gap-3 w-full px-4 py-3 rounded-lg transition-colors group ${
+                currentView === item.id ? 'bg-slate-100 text-slate-900' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+              }`}
             >
-              <item.icon size={20} style={{ color: COLORS.pacificCyan }} />
+              <item.icon size={20} style={{ color: currentView === item.id ? COLORS.emerald : COLORS.pacificCyan }} />
               <span className="font-medium">{item.label}</span>
             </button>
           ))}
@@ -220,89 +524,17 @@ const Sidebar = ({ isOpen, close }) => {
         {/* Semester Context Footer */}
         <div className="p-4 border-t border-slate-100 bg-slate-50">
            <div className="text-[10px] uppercase tracking-wider text-slate-500 font-bold mb-1">Current Semester</div>
-           <div className="font-medium text-slate-800 text-sm">Winter 2026</div>
-           <div className="text-xs text-slate-500 truncate">Modelmaking & Casting</div>
+           {currentSemester ? (
+             <>
+               <div className="font-medium text-slate-800 text-sm truncate" title={currentSemester.name}>{currentSemester.name}</div>
+               <div className="text-xs text-slate-500 truncate">{currentSemester.courseCode}</div>
+             </>
+           ) : (
+             <div className="text-xs text-slate-400">No Semester Selected</div>
+           )}
         </div>
       </aside>
     </>
-  );
-};
-
-// --- View Content ---
-
-const StudentDashboard = () => {
-  return (
-    <div className="space-y-6">
-      {/* Welcome Banner */}
-      <div className="bg-white p-6 rounded-lg shadow-sm border-l-4" style={{ borderLeftColor: COLORS.pacificCyan }}>
-        <h2 className="text-xl font-bold text-slate-800">Hello, Alex.</h2>
-        <p className="text-slate-500">Welcome to Week 4. You have 2 items upcoming.</p>
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        {/* Next Up Card */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="p-4 font-bold flex items-center gap-2 text-white" style={{ backgroundColor: COLORS.vintageGrape }}>
-            <AlertCircle size={20} />
-            Next Up / Overdue
-          </div>
-          <div className="p-4 space-y-4">
-             <div className="p-3 bg-red-50 border-l-4 border-red-200 rounded text-sm">
-                <div className="font-bold text-red-800">P1 Check-in #2</div>
-                <div className="text-red-600">Due Yesterday</div>
-             </div>
-             <div className="p-3 bg-slate-50 border-l-4 border-slate-300 rounded text-sm">
-                <div className="font-bold text-slate-800">P2 Demo Day</div>
-                <div className="text-slate-600">Tomorrow, 10:00 AM</div>
-             </div>
-          </div>
-        </div>
-
-        {/* Action Card */}
-        <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-          <div className="p-4 font-bold border-b border-slate-100 text-slate-800">
-            Quick Actions
-          </div>
-          <div className="p-6 flex flex-col gap-3">
-            <p className="text-sm text-slate-500 mb-2">Upload photos from your phone directly to your project log.</p>
-            <Button variant="primary" fullWidth>
-              <Calendar size={18} /> View P1 Timeline
-            </Button>
-            <Button variant="outline" fullWidth>
-              View My Grades / Status
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const AdminDashboard = () => {
-  return (
-    <div className="space-y-6">
-       <div className="bg-white p-6 rounded-lg shadow-sm border-l-4" style={{ borderLeftColor: COLORS.dustyGrape }}>
-        <h2 className="text-xl font-bold text-slate-800">Semester Overview</h2>
-        <p className="text-slate-500">Winter 2026 • 24 Students Enrolled</p>
-      </div>
-      
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Stat Cards */}
-        {[
-          { label: 'Pending Reviews', val: '8', color: COLORS.emerald },
-          { label: 'Overdue Students', val: '3', color: COLORS.vintageGrape },
-          { label: 'Days Until Critique', val: '12', color: COLORS.pacificCyan },
-        ].map((stat) => (
-          <div key={stat.label} className="bg-white p-6 rounded-lg shadow-sm flex items-center justify-between">
-            <div>
-              <div className="text-3xl font-bold" style={{ color: stat.color }}>{stat.val}</div>
-              <div className="text-sm text-slate-500 font-medium">{stat.label}</div>
-            </div>
-            <div className="h-10 w-1 rounded-full bg-slate-100"></div>
-          </div>
-        ))}
-      </div>
-    </div>
   );
 };
 
@@ -311,17 +543,36 @@ const AdminDashboard = () => {
 const AppShell = () => {
   const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [currentView, setCurrentView] = useState('dashboard');
 
   if (!user) return <LoginScreen />;
+
+  const renderView = () => {
+    switch(currentView) {
+      case 'dashboard':
+        return user.role === ROLES.STUDENT ? <StudentDashboard /> : <AdminDashboard />;
+      case 'semesters':
+        return <SemesterList />;
+      case 'projects':
+        return <ProjectManager />;
+      default:
+        return user.role === ROLES.STUDENT ? <StudentDashboard /> : <AdminDashboard />;
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
       <Navbar toggleSidebar={() => setSidebarOpen(!sidebarOpen)} />
-      <Sidebar isOpen={sidebarOpen} close={() => setSidebarOpen(false)} />
+      <Sidebar 
+        isOpen={sidebarOpen} 
+        close={() => setSidebarOpen(false)} 
+        currentView={currentView}
+        setView={setCurrentView}
+      />
       
       <main className="pt-16 lg:pl-64 min-h-screen transition-all duration-200">
         <div className="p-4 lg:p-8 max-w-7xl mx-auto">
-          {user.role === ROLES.STUDENT ? <StudentDashboard /> : <AdminDashboard />}
+          {renderView()}
         </div>
       </main>
     </div>
@@ -331,7 +582,9 @@ const AppShell = () => {
 const App = () => {
   return (
     <AuthProvider>
-      <AppShell />
+      <DataProvider>
+        <AppShell />
+      </DataProvider>
     </AuthProvider>
   );
 };
