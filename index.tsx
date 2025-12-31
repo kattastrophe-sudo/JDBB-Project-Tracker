@@ -1,6 +1,6 @@
 import React, { useState, createContext, useContext, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, MoreHorizontal, Clock, Tag, UserPlus, Trash2, Search, Sun, Moon, ArrowLeft, Camera, FileText, Send, Paperclip, BarChart3, Filter, X, Lock, Eye } from 'lucide-react';
+import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, MoreHorizontal, Clock, Tag, UserPlus, Trash2, Search, Sun, Moon, ArrowLeft, Camera, FileText, Send, Paperclip, BarChart3, Filter, X, Lock, Eye, Settings, Mail, Archive, Power } from 'lucide-react';
 
 // --- JDBB Design System & Constants ---
 
@@ -86,6 +86,15 @@ interface StudentProjectState {
   instructorNotes?: string;
 }
 
+interface NotificationLog {
+  id: string;
+  date: string;
+  recipient: string;
+  type: 'Reminder' | 'Alert';
+  subject: string;
+  status: 'Sent' | 'Failed' | 'Queued';
+}
+
 // --- Theme Context ---
 
 const ThemeContext = createContext({
@@ -125,9 +134,11 @@ interface DataContextType {
   enrollments: Enrollment[];
   checkIns: CheckIn[];
   projectStates: StudentProjectState[];
+  notificationLogs: NotificationLog[];
   currentSemesterId: string;
   setCurrentSemesterId: (id: string) => void;
   addSemester: (sem: Omit<Semester, 'id'>) => void;
+  toggleSemesterStatus: (id: string) => void;
   addScheduleItem: (item: Omit<ScheduleItem, 'id'>) => void;
   addStudentToSemester: (student: { name: string; email: string; studentNumber: string; tagNumber: string }, semesterId: string) => void;
   removeStudentFromSemester: (enrollmentId: string) => void;
@@ -183,6 +194,12 @@ const initialProjectStates: StudentProjectState[] = [
   { id: 'ps-5', projectId: 'p-2', studentId: 'u-3', status: 'in_progress', lastActivity: '2026-01-21' },
 ];
 
+const initialNotificationLogs: NotificationLog[] = [
+  { id: 'n-1', date: '2026-01-30T08:00:00', recipient: 'alex@student.jdbb.edu', type: 'Reminder', subject: 'P1 Due in 2 days', status: 'Sent' },
+  { id: 'n-2', date: '2026-01-30T08:00:00', recipient: 'sam@student.jdbb.edu', type: 'Reminder', subject: 'P1 Due in 2 days', status: 'Sent' },
+  { id: 'n-3', date: '2026-01-28T08:00:00', recipient: 'jordan@student.jdbb.edu', type: 'Alert', subject: 'Missed Progress Check', status: 'Failed' },
+];
+
 const DataProvider = ({ children }: { children: React.ReactNode }) => {
   const [semesters, setSemesters] = useState<Semester[]>(initialSemesters);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
@@ -191,11 +208,16 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
   const [enrollments, setEnrollments] = useState<Enrollment[]>(initialEnrollments);
   const [checkIns, setCheckIns] = useState<CheckIn[]>(initialCheckIns);
   const [projectStates, setProjectStates] = useState<StudentProjectState[]>(initialProjectStates);
+  const [notificationLogs, setNotificationLogs] = useState<NotificationLog[]>(initialNotificationLogs);
   const [currentSemesterId, setCurrentSemesterId] = useState<string>('sem-1');
 
   const addSemester = (sem: Omit<Semester, 'id'>) => {
     const newSem = { ...sem, id: `sem-${Date.now()}` };
     setSemesters([...semesters, newSem]);
+  };
+
+  const toggleSemesterStatus = (id: string) => {
+    setSemesters(prev => prev.map(s => s.id === id ? { ...s, isActive: !s.isActive } : s));
   };
 
   const addScheduleItem = (item: Omit<ScheduleItem, 'id'>) => {
@@ -276,8 +298,8 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
   return (
     <DataContext.Provider value={{ 
-      semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates,
-      currentSemesterId, setCurrentSemesterId, addSemester, addScheduleItem,
+      semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates, notificationLogs,
+      currentSemesterId, setCurrentSemesterId, addSemester, toggleSemesterStatus, addScheduleItem,
       addStudentToSemester, removeStudentFromSemester, addCheckIn, updateProjectStatus, updateInstructorNotes
     }}>
       {children}
@@ -901,8 +923,34 @@ const ProgressMatrix = ({ onSelectStudent }: { onSelectStudent: (studentId: stri
 
 // --- View: Semesters (Admin) ---
 
-const SemesterList = () => {
-  const { semesters, setCurrentSemesterId, currentSemesterId } = useData();
+const SemesterManager = () => {
+  const { semesters, setCurrentSemesterId, currentSemesterId, addSemester, toggleSemesterStatus } = useData();
+  const { user } = useAuth();
+  
+  // Create New Semester State
+  const [isCreating, setIsCreating] = useState(false);
+  const [newName, setNewName] = useState('');
+  const [newCode, setNewCode] = useState('');
+  const [newStartDate, setNewStartDate] = useState('');
+
+  const isAdmin = user.role === ROLES.ADMIN_TECH;
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newName || !newCode || !newStartDate) return;
+    
+    addSemester({
+      name: newName,
+      courseCode: newCode,
+      startDate: newStartDate,
+      isActive: true
+    });
+    
+    setIsCreating(false);
+    setNewName('');
+    setNewCode('');
+    setNewStartDate('');
+  };
 
   return (
     <div className="space-y-6">
@@ -911,10 +959,35 @@ const SemesterList = () => {
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Semesters</h2>
           <p className="text-slate-500 dark:text-slate-400">Manage course instances and archives.</p>
         </div>
-        <Button variant="primary">
-          <Plus size={18} /> New Semester
-        </Button>
+        {isAdmin && (
+          <Button variant="primary" onClick={() => setIsCreating(!isCreating)}>
+             {isCreating ? 'Cancel' : <><Plus size={18} /> New Semester</>}
+          </Button>
+        )}
       </div>
+
+      {isCreating && isAdmin && (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50">
+           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+             <Shield size={16} className="text-emerald-500" /> Create New Semester
+           </h3>
+           <form onSubmit={handleCreate} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
+             <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Semester Name</label>
+                <input type="text" placeholder="e.g. Winter 2026" value={newName} onChange={e => setNewName(e.target.value)} className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500" required />
+             </div>
+             <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Course Code</label>
+                <input type="text" placeholder="e.g. JJEW-100" value={newCode} onChange={e => setNewCode(e.target.value)} className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500" required />
+             </div>
+             <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Start Date</label>
+                <input type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)} className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500" required />
+             </div>
+             <Button variant="primary" fullWidth>Create Semester</Button>
+           </form>
+        </div>
+      )}
 
       <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden transition-colors">
         <table className="w-full text-left">
@@ -942,7 +1015,7 @@ const SemesterList = () => {
                     </span>
                   )}
                 </td>
-                <td className="px-6 py-4">
+                <td className="px-6 py-4 flex items-center gap-3">
                   {currentSemesterId !== sem.id && (
                      <Button 
                        variant="outline" 
@@ -957,11 +1030,100 @@ const SemesterList = () => {
                       <CheckCircle size={14} /> Selected
                     </span>
                   )}
+                  {isAdmin && (
+                    <button 
+                      onClick={() => toggleSemesterStatus(sem.id)}
+                      className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-300"
+                      title={sem.isActive ? "Archive Semester" : "Activate Semester"}
+                    >
+                      {sem.isActive ? <Archive size={16} /> : <Power size={16} />}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+};
+
+// --- View: Admin Settings (Notification Log) ---
+
+const AdminSettings = () => {
+  const { notificationLogs } = useData();
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">System Settings</h2>
+        <p className="text-slate-500 dark:text-slate-400">System configuration and notification logs.</p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-6">
+        
+        {/* Notification Log Card */}
+        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+           <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
+             <h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+               <Mail size={18} /> Notification Log
+             </h3>
+             <span className="text-xs text-slate-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 px-2 py-1 rounded">Last 24 Hours</span>
+           </div>
+           
+           <table className="w-full text-left">
+             <thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-800">
+               <tr>
+                 <th className="px-6 py-3 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Time</th>
+                 <th className="px-6 py-3 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Recipient</th>
+                 <th className="px-6 py-3 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Subject</th>
+                 <th className="px-6 py-3 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
+               </tr>
+             </thead>
+             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+               {notificationLogs.map(log => (
+                 <tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50">
+                   <td className="px-6 py-4 text-xs text-slate-500 dark:text-slate-400">
+                     {new Date(log.date).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                   </td>
+                   <td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300">{log.recipient}</td>
+                   <td className="px-6 py-4 text-sm text-slate-600 dark:text-slate-400">
+                      <span className={`inline-block mr-2 w-1.5 h-1.5 rounded-full ${log.type === 'Alert' ? 'bg-red-500' : 'bg-blue-500'}`}></span>
+                      {log.subject}
+                   </td>
+                   <td className="px-6 py-4">
+                      <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${
+                        log.status === 'Sent' ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300' :
+                        log.status === 'Failed' ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300' :
+                        'bg-slate-100 text-slate-800'
+                      }`}>
+                        {log.status}
+                      </span>
+                   </td>
+                 </tr>
+               ))}
+             </tbody>
+           </table>
+        </div>
+        
+        {/* System Info Card */}
+        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
+             <Settings size={18} /> Configuration
+           </h3>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                 <div className="text-xs font-bold text-slate-500 uppercase mb-1">Timezone</div>
+                 <div className="font-mono text-sm text-slate-800 dark:text-slate-200">America/Toronto</div>
+              </div>
+              <div className="p-4 rounded border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                 <div className="text-xs font-bold text-slate-500 uppercase mb-1">Reminder Frequency</div>
+                 <div className="font-mono text-sm text-slate-800 dark:text-slate-200">Daily @ 08:00 EST</div>
+              </div>
+           </div>
+        </div>
+
       </div>
     </div>
   );
@@ -1273,6 +1435,7 @@ const ProjectManager = ({ onSelectProject }: { onSelectProject?: (id: string) =>
 
 const ScheduleManager = () => {
   const { scheduleItems, currentSemesterId, semesters, addScheduleItem } = useData();
+  const { user } = useAuth();
   const currentSemester = semesters.find(s => s.id === currentSemesterId);
   
   // Filter and sort items
@@ -1348,49 +1511,51 @@ const ScheduleManager = () => {
         <p className="text-slate-500 dark:text-slate-400">Timeline for {currentSemester?.name}</p>
       </div>
 
-      {/* Quick Add Form */}
-      <div className="bg-white dark:bg-slate-900 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
-        <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3 flex items-center gap-2">
-          <Clock size={16} /> Quick Add Event
-        </h3>
-        <form onSubmit={handleAdd} className="flex flex-col md:flex-row gap-3">
-          <input 
-            type="date" 
-            value={newItemDate}
-            onChange={(e) => setNewItemDate(e.target.value)}
-            className="border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 focus:outline-none focus:border-emerald-500"
-            required
-          />
-          <select 
-            value={newItemType}
-            onChange={(e) => setNewItemType(e.target.value as any)}
-            className="border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 focus:outline-none focus:border-emerald-500"
-          >
-            <option value="due">Due Date</option>
-            <option value="demo">Demo Day</option>
-            <option value="progress_check">Progress Check</option>
-            <option value="lab_day">Lab Day</option>
-            <option value="critique">Critique</option>
-          </select>
-          <input 
-            type="text" 
-            placeholder="Event Title (e.g., P1 Final Submission)"
-            value={newItemTitle}
-            onChange={(e) => setNewItemTitle(e.target.value)}
-            className="border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 flex-1 focus:outline-none focus:border-emerald-500 placeholder:text-slate-400"
-            required
-          />
-          <Button variant="primary" className="whitespace-nowrap">
-            <Plus size={16} /> Add to Schedule
-          </Button>
-        </form>
-      </div>
+      {/* Quick Add Form - HIDDEN FOR STUDENTS */}
+      {user.role !== ROLES.STUDENT && (
+        <div className="bg-white dark:bg-slate-900 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
+          <h3 className="text-sm font-bold text-slate-700 dark:text-slate-200 mb-3 flex items-center gap-2">
+            <Clock size={16} /> Quick Add Event
+          </h3>
+          <form onSubmit={handleAdd} className="flex flex-col md:flex-row gap-3">
+            <input 
+              type="date" 
+              value={newItemDate}
+              onChange={(e) => setNewItemDate(e.target.value)}
+              className="border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 focus:outline-none focus:border-emerald-500"
+              required
+            />
+            <select 
+              value={newItemType}
+              onChange={(e) => setNewItemType(e.target.value as any)}
+              className="border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 focus:outline-none focus:border-emerald-500"
+            >
+              <option value="due">Due Date</option>
+              <option value="demo">Demo Day</option>
+              <option value="progress_check">Progress Check</option>
+              <option value="lab_day">Lab Day</option>
+              <option value="critique">Critique</option>
+            </select>
+            <input 
+              type="text" 
+              placeholder="Event Title (e.g., P1 Final Submission)"
+              value={newItemTitle}
+              onChange={(e) => setNewItemTitle(e.target.value)}
+              className="border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 flex-1 focus:outline-none focus:border-emerald-500 placeholder:text-slate-400"
+              required
+            />
+            <Button variant="primary" className="whitespace-nowrap">
+              <Plus size={16} /> Add to Schedule
+            </Button>
+          </form>
+        </div>
+      )}
 
       {/* Schedule List */}
       <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
         {semesterItems.length === 0 ? (
           <div className="p-8 text-center text-slate-400 dark:text-slate-500">
-            No items scheduled yet. Add one above.
+            No items scheduled yet. {user.role !== ROLES.STUDENT && "Add one above."}
           </div>
         ) : (
           <div className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -1423,12 +1588,14 @@ const ScheduleManager = () => {
                      <div className="font-bold text-slate-800 dark:text-slate-200">{item.title}</div>
                   </div>
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
-                    <Button variant="ghost" className="h-8 w-8 p-0">
-                      <MoreHorizontal size={16} />
-                    </Button>
-                  </div>
+                  {/* Actions (Admin Only) */}
+                  {user.role !== ROLES.STUDENT && (
+                    <div className="flex items-center gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                      <Button variant="ghost" className="h-8 w-8 p-0">
+                        <MoreHorizontal size={16} />
+                      </Button>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1627,6 +1794,12 @@ const Sidebar = ({ isOpen, close, currentView, setView }) => {
       icon: Shield, 
       roles: [ROLES.ADMIN_TECH] 
     },
+     { 
+      id: 'settings',
+      label: 'Settings', 
+      icon: Settings, 
+      roles: [ROLES.ADMIN_TECH] 
+    },
   ];
 
   const allowedItems = menuItems.filter(item => item.roles.includes(user.role));
@@ -1708,7 +1881,7 @@ const AppShell = () => {
       case 'dashboard':
         return user.role === ROLES.STUDENT ? <StudentDashboard /> : <AdminDashboard />;
       case 'semesters':
-        return <SemesterList />;
+        return <SemesterManager />;
       case 'projects':
         return <ProjectManager onSelectProject={handleSelectProject} />;
       case 'project_detail':
@@ -1727,6 +1900,8 @@ const AppShell = () => {
         return <ProgressMatrix onSelectStudent={handleSelectStudent} />;
       case 'roster':
         return <RosterManager onSelectStudent={handleSelectStudent} />;
+      case 'settings':
+        return <AdminSettings />;
       default:
         return user.role === ROLES.STUDENT ? <StudentDashboard /> : <AdminDashboard />;
     }
