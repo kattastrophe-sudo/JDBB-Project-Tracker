@@ -356,6 +356,7 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
     const dbCheckIn = {
       project_id: checkIn.projectId,
       student_id: checkIn.studentId,
+      author_id: user.id, // Explicitly set author_id so RLS policy for DELETE (uid = author_id) works
       type: checkIn.type,
       content: checkIn.content,
       image_url: checkIn.imageMockUrl

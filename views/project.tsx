@@ -247,7 +247,9 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
     const handleDeleteCheckIn = async (id) => {
         if(confirm('Are you sure you want to delete this post?')) {
             const res = await deleteCheckIn(id);
-            if(!res.success) alert(res.error);
+            if(!res.success) {
+                 alert("Delete failed. " + (res.error?.message || JSON.stringify(res.error)));
+            }
         }
     };
     
@@ -312,8 +314,8 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                                         )}
                                     </div>
                                     {canDelete && (
-                                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <button onClick={() => handleDeleteCheckIn(ci.id)} className="p-2 text-slate-300 hover:text-red-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Delete Post"><Trash2 size={14}/></button>
+                                        <div className="absolute top-2 right-2">
+                                            <button onClick={() => handleDeleteCheckIn(ci.id)} className="p-2 text-slate-200 dark:text-slate-700 hover:text-red-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Delete Post"><Trash2 size={14}/></button>
                                         </div>
                                     )}
                                 </div>
