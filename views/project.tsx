@@ -46,10 +46,12 @@ export const ProjectManager = ({ onSelectProject }) => {
       deleteProject(id);
   };
 
-  const handleSubmit = (e) => { 
+  const handleSubmit = async (e) => { 
       e.preventDefault(); 
+      let result;
+      
       if (editingId) {
-          updateProject(editingId, { 
+          result = await updateProject(editingId, { 
               code: newCode, 
               title: newTitle, 
               description: newDesc, 
@@ -57,7 +59,7 @@ export const ProjectManager = ({ onSelectProject }) => {
               is_published: isPublished 
           });
       } else {
-          addProject({ 
+          result = await addProject({ 
               semesterId: currentSemesterId, 
               code: newCode, 
               title: newTitle, 
@@ -66,6 +68,21 @@ export const ProjectManager = ({ onSelectProject }) => {
               isPublished 
           }); 
       }
+      
+      if (result && !result.success) {
+          const msg = result.error?.message || JSON.stringify(result.error);
+          const code = result.error?.code;
+          
+          if (code === '23505') {
+              alert("Failed: A project with this Code already exists in this semester.");
+          } else if (code === '42501') {
+              alert("Failed: Permission denied. Ensure you are an Admin Technologist.");
+          } else {
+              alert("Failed: " + msg);
+          }
+          return; // Do not close form on error
+      }
+      
       setIsFormOpen(false); 
   };
   

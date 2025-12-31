@@ -147,7 +147,7 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   };
 
   const addProject = async (project) => {
-    if (!supabase) return;
+    if (!supabase) return { success: false, error: { message: "Database not connected" } };
     const dbProject = {
       semester_id: project.semesterId,
       code: project.code,
@@ -159,19 +159,27 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
     const { data, error } = await supabase.from('projects').insert([dbProject]).select();
     if (error) {
        console.error("Add Project Error:", error);
-       alert("Failed to add project. " + (error.code === '42501' ? "Permission denied." : error.message));
+       return { success: false, error };
     }
-    if (data) setProjects(prev => [...prev, data[0]]);
+    if (data) {
+        setProjects(prev => [...prev, data[0]]);
+        return { success: true, data: data[0] };
+    }
+    return { success: false, error: { message: "Unknown error" } };
   };
   
   const updateProject = async (id, updates) => {
-     if (!supabase) return;
+     if (!supabase) return { success: false, error: { message: "Database not connected" } };
      const { data, error } = await supabase.from('projects').update(updates).eq('id', id).select();
      if (error) {
-         alert("Update failed: " + error.message);
-         return;
+         console.error("Update Project Error:", error);
+         return { success: false, error };
      }
-     if (data) setProjects(prev => prev.map(p => p.id === id ? data[0] : p));
+     if (data) {
+         setProjects(prev => prev.map(p => p.id === id ? data[0] : p));
+         return { success: true, data: data[0] };
+     }
+     return { success: false, error: { message: "Unknown error" } };
   };
   
   const deleteProject = async (id) => {
