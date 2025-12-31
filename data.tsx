@@ -241,9 +241,18 @@ export const DataProvider = ({ children }) => {
             .eq('email', studentData.email)
             .maybeSingle();
          
-         // 2. Prepare payload. If profile exists, link it. If not, link email only (Pending).
+         // SECURITY FIX: Enforce "Sign Up First" policy.
+         // This prevents 42501 (RLS) errors because we don't attempt to create "Pending" students with null profile_ids.
+         if (!profileData) {
+             return { 
+                 success: false, 
+                 error: "Student account not found. They must Sign Up for an account before they can be enrolled." 
+             };
+         }
+         
+         // 2. Prepare payload. 
          const enrollmentPayload = {
-             profile_id: profileData ? profileData.id : null, 
+             profile_id: profileData.id, 
              email: studentData.email,
              semester_id: semesterId,
              student_number: studentData.studentNumber,
@@ -267,7 +276,7 @@ export const DataProvider = ({ children }) => {
              }
              // Check for RLS Policy violation (Code 42501)
              else if (error.code === '42501') {
-                 errorMessage = "Permission Denied: Your account is not authorized to add students. Ensure you are logged in as an Administrator.";
+                 errorMessage = "Permission Denied: Your account is not authorized to enroll this student.";
              }
              
              return { success: false, error: errorMessage };
@@ -275,9 +284,6 @@ export const DataProvider = ({ children }) => {
 
          if (data) {
              setEnrollments(prev => [...prev, data[0]]);
-             // Refresh profiles just in case
-             const { data: p } = await supabase.from('profiles').select('*');
-             if(p) setProfiles(p);
              return { success: true };
          }
          return { success: false, error: 'Unknown error occurred (No data returned)' };

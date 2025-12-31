@@ -298,12 +298,16 @@ export const RosterManager = ({ onSelectStudent }) => {
                 <button onClick={() => setViewMode('roster')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-colors ${viewMode === 'roster' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}>Roster</button>
                 <button onClick={() => setViewMode('directory')} className={`px-4 py-1.5 text-xs font-bold rounded-md transition-colors ${viewMode === 'directory' ? 'bg-white dark:bg-slate-700 text-slate-800 dark:text-white shadow-sm' : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'}`}>User Directory</button>
             </div>
-            {isAdminTech && <Button variant="primary" onClick={() => { setIsAdding(!isAdding); setErrorMsg(''); setNewName(''); setNewEmail(''); }}>{isAdding ? 'Cancel' : <><UserPlus size={18} /> Add Student</>}</Button>}
+            {isAdminTech && <Button variant="primary" onClick={() => { setIsAdding(!isAdding); setErrorMsg(''); setNewName(''); setNewEmail(''); }}>{isAdding ? 'Cancel' : <><UserPlus size={18} /> Enroll Registered User</>}</Button>}
           </div>
       </div>
 
       {isAdding && isAdminTech && <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50 animate-in fade-in slide-in-from-top-2 duration-300">
         <h3 className="font-bold text-emerald-600 dark:text-emerald-400 mb-4 flex items-center gap-2"><UserPlus size={18}/> Enroll Student into {currentSemester?.name}</h3>
+        <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs rounded-lg flex items-start gap-2">
+           <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+           <p><strong>Note:</strong> Students must sign up for an account first. Use the <strong>Directory</strong> tab to see all registered users, or enter their exact email below if they have already signed up.</p>
+        </div>
         <form onSubmit={handleAddStudent} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                 <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tag #</label><input type="text" maxLength={2} value={newTag} onChange={e => setNewTag(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:border-emerald-500 outline-none" required placeholder="01" /></div>
@@ -311,7 +315,7 @@ export const RosterManager = ({ onSelectStudent }) => {
                 <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label><input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:border-emerald-500 outline-none" required placeholder="student@college.edu" /></div>
                 <div className="md:col-span-1"><Button type="submit" variant="primary" fullWidth disabled={isSubmitting}>{isSubmitting ? 'Adding...' : 'Confirm'}</Button></div>
             </div>
-            {errorMsg && <div className="text-red-500 text-sm font-bold flex items-center gap-2"><AlertCircle size={16} /> {errorMsg}</div>}
+            {errorMsg && <div className="text-red-500 text-sm font-bold flex items-center gap-2 bg-red-50 dark:bg-red-900/30 p-3 rounded-lg"><AlertCircle size={16} /> {errorMsg}</div>}
         </form>
       </div>}
 
