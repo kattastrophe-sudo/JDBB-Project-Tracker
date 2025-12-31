@@ -94,6 +94,27 @@ export const DataProvider = ({ children }) => {
   const [notificationLogs, setNotificationLogs] = useState([]); 
   const [currentSemesterId, setCurrentSemesterId] = useState(null);
 
+  // Auto-link pending enrollments when a user logs in
+  const linkPendingEnrollments = async (email, userId) => {
+    if (!supabase) return;
+    // Find enrollments with this email but NO profile_id
+    const { data: pending } = await supabase.from('enrollments').select('id').eq('email', email).is('profile_id', null);
+    
+    if (pending && pending.length > 0) {
+       // Update them to belong to this new user
+       await supabase.from('enrollments').update({ profile_id: userId }).in('id', pending.map(p => p.id));
+       // Trigger a refresh of enrollments
+       const { data: refreshed } = await supabase.from('enrollments').select('*');
+       if (refreshed) setEnrollments(refreshed);
+    }
+  };
+
+  useEffect(() => {
+    if (user && supabase) {
+        linkPendingEnrollments(user.email, user.id);
+    }
+  }, [user]);
+
   // Fetch Data when User logs in
   useEffect(() => {
     if (!user || !supabase) {
@@ -210,25 +231,31 @@ export const DataProvider = ({ children }) => {
   
   const addStudentToSemester = async (studentData, semesterId) => {
      if (!supabase) return;
-     // Try to find profile by email
+     
+     // 1. Try to find existing profile
      const { data: profileData } = await supabase.from('profiles').select('id').eq('email', studentData.email).single();
      
-     if (!profileData) {
-         // This is where we handle the "Not Registered" case
-         alert(`Cannot add ${studentData.email}. The student must Create an Account first, then you can add them to the roster.`);
-         return;
-     }
-
-     const { data } = await supabase.from('enrollments').insert([{
-         profile_id: profileData.id,
+     // 2. Prepare payload. If profile exists, link it. If not, link email only (Pending).
+     const enrollmentPayload = {
+         profile_id: profileData ? profileData.id : null, 
+         email: studentData.email,
          semester_id: semesterId,
          student_number: studentData.studentNumber,
          tag_number: studentData.tagNumber,
          status: 'active'
-     }]).select();
+     };
+
+     const { data, error } = await supabase.from('enrollments').insert([enrollmentPayload]).select();
+
+     if (error) {
+         console.error("Add student error:", error);
+         alert("Failed to add student. Ensure Tag Number is unique.");
+         return;
+     }
 
      if (data) {
          setEnrollments(prev => [...prev, data[0]]);
+         // Refresh profiles just in case
          const { data: p } = await supabase.from('profiles').select('*');
          if(p) setProfiles(p);
      }
