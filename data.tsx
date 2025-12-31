@@ -114,6 +114,7 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
     const channels = supabase.channel('custom-all-channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'check_ins' }, (payload) => {
         if(payload.eventType === 'INSERT') setCheckIns(prev => [payload.new, ...prev]);
+        if(payload.eventType === 'DELETE') setCheckIns(prev => prev.filter(c => c.id !== payload.old.id));
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_states' }, (payload) => {
          supabase.from('project_states').select('*').then(res => { if(res.data) setProjectStates(res.data); });
@@ -368,6 +369,14 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
     }
   };
   
+  const deleteCheckIn = async (id) => {
+    if (!supabase) return { success: false, error: 'No connection' };
+    const { error } = await supabase.from('check_ins').delete().eq('id', id);
+    if (error) return { success: false, error };
+    setCheckIns(prev => prev.filter(c => c.id !== id));
+    return { success: true };
+  };
+  
   // Upload File Function
   const uploadFile = async (file) => {
       if (!supabase) return { success: false, error: 'No connection' };
@@ -483,7 +492,7 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
     <DataContext.Provider value={{ 
       semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates, notificationLogs, loading,
       currentSemesterId, setCurrentSemesterId, addSemester, toggleSemesterStatus, addProject, updateProject, deleteProject, addScheduleItem, deleteScheduleItem,
-      addStudentToSemester, joinSemester, removeStudentFromSemester, updateProfileRole, addCheckIn, updateProjectStatus, updateInstructorNotes,
+      addStudentToSemester, joinSemester, removeStudentFromSemester, updateProfileRole, addCheckIn, deleteCheckIn, updateProjectStatus, updateInstructorNotes,
       runDailyReminders, uploadFile, exportRosterToCSV
     }}>
       {children}

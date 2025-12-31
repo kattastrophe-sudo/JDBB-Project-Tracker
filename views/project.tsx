@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useData, useAuth } from '../data';
 import { ROLES } from '../config';
 import { Button } from '../components';
-import { Plus, Tag, ArrowLeft, Clock, Shield, User, Camera, Send, Download, HelpCircle, X, Image as ImageIcon, Loader2, Link as LinkIcon, ExternalLink, Trash2, Edit2, Save } from 'lucide-react';
+import { Plus, Tag, ArrowLeft, Clock, Shield, User, Camera, Send, Download, HelpCircle, X, Image as ImageIcon, Loader2, Link as LinkIcon, ExternalLink, Trash2, Edit2, Save, Maximize2 } from 'lucide-react';
 
 export const ProjectManager = ({ onSelectProject }) => {
   const { projects, currentSemesterId, semesters, projectStates, addProject, updateProject, deleteProject } = useData();
@@ -196,13 +196,14 @@ export const ScheduleManager = () => {
 };
 
 export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
-    const { projects, checkIns, addCheckIn, projectStates, updateInstructorNotes, updateProjectStatus, uploadFile } = useData();
+    const { projects, checkIns, addCheckIn, deleteCheckIn, projectStates, updateInstructorNotes, updateProjectStatus, uploadFile } = useData();
     const { user } = useAuth();
     const project = projects.find(p => p.id === projectId);
     const [note, setNote] = useState('');
     const [checkInText, setCheckInText] = useState('');
     const [imageFile, setImageFile] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [viewingImage, setViewingImage] = useState(null);
     const fileInputRef = useRef(null);
     
     // Determine whose data we are looking at
@@ -243,6 +244,13 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
         setIsUploading(false);
     };
     
+    const handleDeleteCheckIn = async (id) => {
+        if(confirm('Are you sure you want to delete this post?')) {
+            const res = await deleteCheckIn(id);
+            if(!res.success) alert(res.error);
+        }
+    };
+    
     const handleStatusChange = (newStatus) => {
         updateProjectStatus(projectId, studentId, newStatus);
     };
@@ -253,6 +261,14 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            {/* LIGHTBOX MODAL */}
+            {viewingImage && (
+                <div className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center p-4 cursor-zoom-out animate-in fade-in duration-200" onClick={() => setViewingImage(null)}>
+                    <img src={viewingImage} className="max-w-full max-h-screen object-contain rounded-lg shadow-2xl" alt="Full view" />
+                    <button className="absolute top-6 right-6 text-white/50 hover:text-white transition-colors"><X size={32}/></button>
+                </div>
+            )}
+        
             <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-emerald-500 transition-colors mb-4"><ArrowLeft size={18} /> Back</button>
             
             <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-sm border border-slate-100 dark:border-slate-800">
@@ -270,25 +286,39 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                     <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Clock size={18}/> Activity Stream</h3>
                     <div className="space-y-4">
                         {studentCheckIns.length === 0 && <div className="p-8 text-center bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-400">No activity recorded yet.</div>}
-                        {studentCheckIns.map(ci => (
-                            <div key={ci.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex gap-4">
-                                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-500">
-                                    {ci.type === 'instructor_comment' ? <Shield size={18} /> : <User size={18} />}
-                                </div>
-                                <div className="flex-1">
-                                    <div className="flex items-center gap-2 mb-1">
-                                        <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{ci.type === 'instructor_comment' ? 'Instructor' : 'Student'}</span>
-                                        <span className="text-xs text-slate-400">{new Date(ci.created_at).toLocaleString()}</span>
+                        {studentCheckIns.map(ci => {
+                            const canDelete = user.role !== ROLES.STUDENT || ci.type !== 'instructor_comment';
+                            return (
+                                <div key={ci.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex gap-4 group relative">
+                                    <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-500">
+                                        {ci.type === 'instructor_comment' ? <Shield size={18} /> : <User size={18} />}
                                     </div>
-                                    <p className="text-slate-600 dark:text-slate-400 text-sm">{ci.content}</p>
-                                    {ci.image_url && (
-                                        <div className="mt-3">
-                                            <img src={ci.image_url} alt="Check-in attachment" className="rounded-lg max-h-48 border border-slate-200 dark:border-slate-700 hover:scale-105 transition-transform cursor-pointer" />
+                                    <div className="flex-1">
+                                        <div className="flex items-center gap-2 mb-1">
+                                            <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{ci.type === 'instructor_comment' ? 'Instructor' : 'Student'}</span>
+                                            <span className="text-xs text-slate-400">{new Date(ci.created_at).toLocaleString()}</span>
+                                        </div>
+                                        <p className="text-slate-600 dark:text-slate-400 text-sm whitespace-pre-wrap">{ci.content}</p>
+                                        {ci.image_url && (
+                                            <div className="mt-3 relative inline-block group/img">
+                                                <img 
+                                                    src={ci.image_url} 
+                                                    alt="Check-in attachment" 
+                                                    onClick={() => setViewingImage(ci.image_url)}
+                                                    className="rounded-lg max-h-48 border border-slate-200 dark:border-slate-700 hover:brightness-90 transition-all cursor-zoom-in" 
+                                                />
+                                                <div className="absolute top-2 right-2 bg-black/50 text-white p-1 rounded-md opacity-0 group-hover/img:opacity-100 pointer-events-none"><Maximize2 size={14}/></div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    {canDelete && (
+                                        <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <button onClick={() => handleDeleteCheckIn(ci.id)} className="p-2 text-slate-300 hover:text-red-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Delete Post"><Trash2 size={14}/></button>
                                         </div>
                                     )}
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                     
                     {!isInstructor ? (
