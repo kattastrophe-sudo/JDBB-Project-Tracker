@@ -246,11 +246,11 @@ export const DataProvider = ({ children }) => {
          if (!profileData) {
              return { 
                  success: false, 
-                 error: "Student account not found. They must Sign Up for an account before they can be enrolled." 
+                 error: "Account not found. The student must Sign Up for an account before they can be enrolled." 
              };
          }
          
-         // 2. Prepare payload. 
+         // 2. Prepare payload with GUARANTEED profile_id
          const enrollmentPayload = {
              profile_id: profileData.id, 
              email: studentData.email,
