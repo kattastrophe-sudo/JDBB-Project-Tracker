@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
 import { useData, useAuth, COLORS, ROLES, supabase } from './data';
 import { Button } from './components';
-import { ArrowLeft, Clock, Layout, Calendar, AlertTriangle, AlertCircle, Settings, Camera, CheckCircle, Lock, FileText, Send, User, Users, Shield, Filter, X, Plus, Archive, Power, Play, Mail, UserPlus, Trash2, Download, HelpCircle, Edit, Database, Copy, Terminal } from 'lucide-react';
+import { ArrowLeft, Clock, Layout, Calendar, AlertTriangle, AlertCircle, Settings, Camera, CheckCircle, Lock, FileText, Send, User, Users, Shield, Filter, X, Plus, Archive, Power, Play, Mail, UserPlus, Trash2, Download, HelpCircle, Edit, Database, Copy, Terminal, Key } from 'lucide-react';
 
 export const StudentDashboard = () => {
   const { currentSemesterId, semesters, scheduleItems, projects, projectStates, joinSemester } = useData();
@@ -162,6 +163,11 @@ export const AdminSettings = () => {
   const [isRunning, setIsRunning] = useState(false);
   const [realDbRole, setRealDbRole] = useState('Loading...');
   const [copied, setCopied] = useState(false);
+  
+  // Emergency Fix State
+  const [serviceKey, setServiceKey] = useState('');
+  const [fixLoading, setFixLoading] = useState(false);
+  const [fixMsg, setFixMsg] = useState('');
 
   // DEBUG: Check what the database actually thinks I am
   useEffect(() => {
@@ -181,6 +187,35 @@ ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
     navigator.clipboard.writeText(fixCommand);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  };
+  
+  // EMERGENCY FIX LOGIC
+  const handleForceUpgrade = async () => {
+    if (!serviceKey.startsWith('ey')) {
+       setFixMsg('Invalid Key format.');
+       return;
+    }
+    setFixLoading(true);
+    try {
+        const storedUrl = localStorage.getItem('jdbb_supabase_url');
+        const defaultUrl = 'https://yqptmvtlsjyuxtzaegun.supabase.co';
+        
+        // Create a temporary client with the service key
+        const tempClient = createClient(storedUrl || defaultUrl, serviceKey);
+        
+        const { error } = await tempClient.from('profiles').update({ role: ROLES.ADMIN_TECH }).eq('id', user.id);
+        
+        if (error) throw error;
+        
+        setFixMsg('SUCCESS! Role updated to admin_technologist. Refreshing...');
+        setServiceKey('');
+        setTimeout(() => window.location.reload(), 1500);
+        
+    } catch (e) {
+        setFixMsg('Failed: ' + e.message);
+    } finally {
+        setFixLoading(false);
+    }
   };
   
   return (
@@ -204,25 +239,36 @@ ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
         </div>
         
         {realDbRole !== ROLES.ADMIN_TECH && (
-          <div className="bg-amber-900/30 border border-amber-900/50 p-4 rounded mb-4 text-sm text-amber-200">
-             <div className="font-bold flex items-center gap-2 mb-2"><AlertTriangle size={16} /> Permission Mismatch Detected</div>
-             Your database thinks you are a <strong>{realDbRole}</strong>, but you need to be an <strong>admin_technologist</strong> to manage the system. Run this SQL in your Supabase Dashboard to fix it permanently.
+          <div className="space-y-4">
+             <div className="bg-amber-900/30 border border-amber-900/50 p-4 rounded text-sm text-amber-200">
+                 <div className="font-bold flex items-center gap-2 mb-2"><AlertTriangle size={16} /> Permission Mismatch Detected</div>
+                 Your database thinks you are a <strong>{realDbRole}</strong>. You have two options to fix this:
+             </div>
+
+             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div className="bg-slate-950 p-4 rounded border border-slate-800">
+                    <h4 className="font-bold text-emerald-400 mb-2">Option A: Run SQL (Preferred)</h4>
+                    <p className="text-xs text-slate-400 mb-3">Copy this command and run it in your Supabase SQL Editor.</p>
+                    <div className="relative group mb-2">
+                        <pre className="bg-black p-3 rounded text-[10px] font-mono text-slate-300 overflow-x-auto border border-slate-800">{fixCommand}</pre>
+                        <button onClick={copyToClipboard} className="absolute top-1 right-1 text-xs bg-slate-800 text-white px-2 py-1 rounded">{copied ? 'Copied' : 'Copy'}</button>
+                    </div>
+                 </div>
+
+                 <div className="bg-slate-950 p-4 rounded border border-slate-800">
+                    <h4 className="font-bold text-pink-400 mb-2">Option B: Emergency Key</h4>
+                    <p className="text-xs text-slate-400 mb-3">Paste your <code>service_role</code> key here to force-update your account now.</p>
+                    <div className="flex gap-2">
+                        <input type="password" value={serviceKey} onChange={e => setServiceKey(e.target.value)} placeholder="eyJh..." className="flex-1 bg-black border border-slate-700 rounded px-2 py-1 text-xs text-white outline-none focus:border-pink-500" />
+                        <Button variant="danger" size="sm" onClick={handleForceUpgrade} disabled={fixLoading || !serviceKey} className="text-xs py-1 px-3">
+                            {fixLoading ? 'Fixing...' : 'Fix'}
+                        </Button>
+                    </div>
+                    {fixMsg && <div className="mt-2 text-xs font-bold text-white">{fixMsg}</div>}
+                 </div>
+             </div>
           </div>
         )}
-
-        <div className="relative group">
-            <div className="absolute top-2 right-2">
-                <button onClick={copyToClipboard} className="flex items-center gap-1 text-xs font-bold bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded transition-colors">
-                    {copied ? <CheckCircle size={12}/> : <Copy size={12}/>} {copied ? 'Copied' : 'Copy SQL'}
-                </button>
-            </div>
-            <pre className="bg-black p-4 rounded text-xs font-mono text-green-400 overflow-x-auto border border-slate-800">
-{fixCommand}
-            </pre>
-        </div>
-        <p className="mt-4 text-xs text-slate-500 flex items-center gap-2">
-            <Terminal size={12} /> Run this in: Supabase Dashboard &rarr; SQL Editor &rarr; New Query
-        </p>
       </div>
 
       <div className="grid grid-cols-1 gap-6"><div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6"><div className="flex justify-between items-start mb-4"><h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Settings size={18} /> Configuration</h3><Button onClick={handleRunReminders} disabled={isRunning} variant="primary">{isRunning ? 'Sending...' : <><Play size={16} /> Run Daily Reminders</>}</Button></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-4 rounded border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50"><div className="text-xs font-bold text-slate-500 uppercase mb-1">Timezone</div><div className="font-mono text-sm text-slate-800 dark:text-slate-200">America/Toronto</div></div></div></div><div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden"><div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900"><h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Mail size={18} /> Notification Log</h3></div><table className="w-full text-left"><thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-800"><tr><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Time</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Recipient</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Status</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{notificationLogs.map(log => (<tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="px-6 py-4 text-xs text-slate-500">{new Date(log.date).toLocaleTimeString()}</td><td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300">{log.recipient}</td><td className="px-6 py-4"><span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${log.status === 'Sent' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{log.status}</span></td></tr>))}</tbody></table></div></div>
