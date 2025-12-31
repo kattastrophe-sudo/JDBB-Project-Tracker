@@ -1,7 +1,3 @@
 // This file is deprecated. 
-// Views have been moved to:
-// - views/admin.tsx
-// - views/student.tsx
-// - views/project.tsx
-// See index.tsx for imports.
+// Views have been moved to specific modules in the views/ directory.
 export {};

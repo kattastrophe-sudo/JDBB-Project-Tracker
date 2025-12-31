@@ -1,9 +1,9 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 import { useData, useAuth } from '../data';
-import { COLORS, ROLES, activeUrl } from '../config';
+import { COLORS, ROLES, activeUrl, supabase } from '../config';
 import { Button } from '../components';
-import { Layout, Calendar, AlertTriangle, AlertCircle, Settings, User, Users, Shield, Plus, Play, Mail, UserPlus, Trash2, Download, CheckCircle, HelpCircle, Database, Key } from 'lucide-react';
+import { Layout, Calendar, AlertTriangle, AlertCircle, Settings, User, Users, Shield, Plus, Play, Mail, UserPlus, Trash2, Download, CheckCircle, HelpCircle, Database, Key, FileText } from 'lucide-react';
 
 export const AdminDashboard = () => {
   const { currentSemesterId, semesters, projects, checkIns, scheduleItems } = useData();
@@ -59,10 +59,6 @@ export const AdminDashboard = () => {
     </div>
   );
 };
-
-// Import necessary icon separately since it wasn't in the top import list for some reason
-import { FileText } from 'lucide-react';
-import { supabase } from '../config';
 
 export const AdminSettings = () => {
   const { notificationLogs, runDailyReminders } = useData();
