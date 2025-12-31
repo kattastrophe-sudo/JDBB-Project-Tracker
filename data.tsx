@@ -210,10 +210,12 @@ export const DataProvider = ({ children }) => {
   
   const addStudentToSemester = async (studentData, semesterId) => {
      if (!supabase) return;
+     // Try to find profile by email
      const { data: profileData } = await supabase.from('profiles').select('id').eq('email', studentData.email).single();
      
      if (!profileData) {
-         alert("Error: This student email must register in the system first.");
+         // This is where we handle the "Not Registered" case
+         alert(`Cannot add ${studentData.email}. The student must Create an Account first, then you can add them to the roster.`);
          return;
      }
 
@@ -343,12 +345,12 @@ export const AuthProvider = ({ children }) => {
               name: data.full_name || authUser.email
           });
       } else {
-          console.warn("Profile not found for user", authUser.id);
+          // If profile missing, fallback (likely just created account)
           setUser({
             id: authUser.id,
             email: authUser.email,
             role: ROLES.STUDENT, 
-            name: authUser.email
+            name: authUser.user_metadata?.full_name || authUser.email
           });
       }
   };
@@ -359,12 +361,27 @@ export const AuthProvider = ({ children }) => {
       if (error) throw error;
   };
 
+  const signUp = async (email, password, fullName) => {
+      if (!supabase) throw new Error("Database not connected");
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            full_name: fullName
+          }
+        }
+      });
+      if (error) throw error;
+      return data;
+  };
+
   const logout = async () => {
       if (!supabase) return;
       await supabase.auth.signOut();
   };
 
-  return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ user, login, logout, signUp }}>{children}</AuthContext.Provider>;
 };
 
 // --- Hooks ---

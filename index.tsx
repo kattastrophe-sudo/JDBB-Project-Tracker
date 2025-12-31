@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { User, Shield, Users, CheckCircle, ArrowLeft, LogIn, AlertCircle, Database, Save } from 'lucide-react';
+import { User, Shield, Users, CheckCircle, ArrowLeft, LogIn, AlertCircle, Database, Save, PlusCircle } from 'lucide-react';
 import { ThemeProvider, AuthProvider, DataProvider, useAuth, ROLES, COLORS, isSupabaseConfigured, saveConfiguration, clearConfiguration } from './data';
 import { Navbar, Sidebar, Button } from './components';
 import { StudentDashboard, AdminDashboard, SemesterManager, ProjectManager, ProjectDetail, StudentProfile, ScheduleManager, ProgressMatrix, RosterManager, AdminSettings } from './views';
@@ -59,23 +59,33 @@ const SetupScreen = () => {
   );
 };
 
-// --- Login Screen ---
+// --- Login / Register Screen ---
 
 const LoginScreen = () => {
-  const { login } = useAuth();
+  const { login, signUp } = useAuth();
+  const [isRegistering, setIsRegistering] = useState(false);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [error, setError] = useState('');
+  const [msg, setMsg] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
       e.preventDefault();
       setError('');
+      setMsg('');
       setLoading(true);
       try {
-          await login(email, password);
+          if (isRegistering) {
+            await signUp(email, password, fullName);
+            setMsg("Account created! You may need to verify your email, or you can try signing in now.");
+            setIsRegistering(false); // Switch back to login
+          } else {
+            await login(email, password);
+          }
       } catch (err) {
-          setError(err.message || "Failed to sign in");
+          setError(err.message || "Failed to authenticate");
       } finally {
           setLoading(false);
       }
@@ -87,7 +97,7 @@ const LoginScreen = () => {
         <div className="text-center mb-8 relative">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-600 text-white font-bold text-lg shadow-lg mb-4">JD</div>
           <h1 className="text-2xl font-bold mb-2 text-slate-800 dark:text-white">JDBB Project Tracker</h1>
-          <p className="text-slate-500 dark:text-slate-400">Sign in to access your dashboard.</p>
+          <p className="text-slate-500 dark:text-slate-400">{isRegistering ? "Create your student account." : "Sign in to access your dashboard."}</p>
           <button onClick={clearConfiguration} className="absolute top-0 right-0 text-slate-300 hover:text-red-500 text-xs" title="Reset Database Connection"><Database size={14}/></button>
         </div>
         
@@ -97,6 +107,26 @@ const LoginScreen = () => {
                     <AlertCircle size={16} /> {error}
                 </div>
             )}
+             {msg && (
+                <div className="bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-200 text-sm p-3 rounded-lg flex items-center gap-2">
+                    <CheckCircle size={16} /> {msg}
+                </div>
+            )}
+            
+            {isRegistering && (
+              <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                  <label className="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Full Name</label>
+                  <input 
+                      type="text" 
+                      value={fullName} 
+                      onChange={e => setFullName(e.target.value)} 
+                      className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500 transition-colors"
+                      required={isRegistering}
+                      placeholder="Jane Doe"
+                  />
+              </div>
+            )}
+
             <div>
                 <label className="block text-xs font-bold uppercase text-slate-500 dark:text-slate-400 mb-1">Email</label>
                 <input 
@@ -105,7 +135,7 @@ const LoginScreen = () => {
                     onChange={e => setEmail(e.target.value)} 
                     className="w-full p-3 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-slate-100 outline-none focus:border-emerald-500 transition-colors"
                     required
-                    placeholder="user@jdbb.college.edu"
+                    placeholder="student@college.edu"
                 />
             </div>
             <div>
@@ -120,11 +150,14 @@ const LoginScreen = () => {
                 />
             </div>
             <Button type="submit" variant="primary" fullWidth disabled={loading}>
-                {loading ? 'Signing in...' : <><LogIn size={18} /> Sign In</>}
+                {loading ? 'Processing...' : (isRegistering ? <><PlusCircle size={18} /> Create Account</> : <><LogIn size={18} /> Sign In</>)}
             </Button>
         </form>
-        <div className="mt-6 text-center text-xs text-slate-400">
-            <p>New Student? Contact your instructor to be added to the roster.</p>
+        
+        <div className="mt-6 text-center pt-4 border-t border-slate-100 dark:border-slate-800">
+            <button onClick={() => { setIsRegistering(!isRegistering); setError(''); setMsg(''); }} className="text-sm font-bold text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300">
+               {isRegistering ? "Already have an account? Sign In" : "Need an account? Sign Up"}
+            </button>
         </div>
       </div>
     </div>
