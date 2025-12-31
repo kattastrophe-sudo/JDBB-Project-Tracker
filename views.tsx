@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useData, useAuth, COLORS, ROLES, supabase } from './data';
 import { Button } from './components';
-import { ArrowLeft, Clock, Layout, Calendar, AlertTriangle, AlertCircle, Settings, Camera, CheckCircle, Lock, FileText, Send, User, Users, Shield, Filter, X, Plus, Archive, Power, Play, Mail, UserPlus, Trash2, Download, HelpCircle, Edit, Database } from 'lucide-react';
+import { ArrowLeft, Clock, Layout, Calendar, AlertTriangle, AlertCircle, Settings, Camera, CheckCircle, Lock, FileText, Send, User, Users, Shield, Filter, X, Plus, Archive, Power, Play, Mail, UserPlus, Trash2, Download, HelpCircle, Edit, Database, Copy, Terminal } from 'lucide-react';
 
 export const StudentDashboard = () => {
   const { currentSemesterId, semesters, scheduleItems, projects, projectStates, joinSemester } = useData();
@@ -161,6 +161,7 @@ export const AdminSettings = () => {
   const { user } = useAuth();
   const [isRunning, setIsRunning] = useState(false);
   const [realDbRole, setRealDbRole] = useState('Loading...');
+  const [copied, setCopied] = useState(false);
 
   // DEBUG: Check what the database actually thinks I am
   useEffect(() => {
@@ -173,29 +174,54 @@ export const AdminSettings = () => {
 
   const handleRunReminders = () => { setIsRunning(true); setTimeout(() => { runDailyReminders(); setIsRunning(false); }, 1000); };
   
+  const fixCommand = `UPDATE profiles SET role = 'admin_technologist' WHERE email = '${user.email}';
+ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
+
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(fixCommand);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+  
   return (
     <div className="space-y-6">
       <div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">System Settings</h2><p className="text-slate-500 dark:text-slate-400">System configuration and notification logs.</p></div>
       
-      {/* CONNECTION DEBUGGER */}
-      <div className="bg-slate-800 text-slate-200 p-6 rounded-lg border border-slate-700">
-        <h3 className="font-bold flex items-center gap-2 mb-4 text-emerald-400"><Database size={18} /> Database Connection Debugger</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-mono">
-            <div className="bg-slate-900 p-3 rounded border border-slate-700">
+      {/* DEVELOPER TOOLS */}
+      <div className="bg-slate-900 text-slate-200 p-6 rounded-lg border border-slate-700">
+        <h3 className="font-bold flex items-center gap-2 mb-4 text-emerald-400"><Database size={18} /> Developer Tools: Permissions Fix</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-mono mb-6">
+            <div className="bg-slate-950 p-3 rounded border border-slate-800">
                 <div className="text-slate-500 text-xs uppercase mb-1">App UI Role (Local)</div>
                 <div className="text-white font-bold">{user.role}</div>
             </div>
-            <div className="bg-slate-900 p-3 rounded border border-slate-700">
+            <div className="bg-slate-950 p-3 rounded border border-slate-800">
                 <div className="text-slate-500 text-xs uppercase mb-1">Database Row Role (Remote)</div>
                 <div className={`${realDbRole === ROLES.ADMIN_TECH ? 'text-green-400' : 'text-red-400'} font-bold`}>
                     {realDbRole}
                 </div>
             </div>
         </div>
-        <p className="mt-4 text-xs text-slate-400">
-            If <strong>Database Row Role</strong> says <em>student</em> or <em>Row Missing</em>, you will get "Permission Denied" errors when trying to add data, even if the App looks like you are an Admin.
-            <br/><br/>
-            <strong>Fix:</strong> Go to Supabase Dashboard -> Table Editor -> `profiles` -> Change your role to <strong>admin_technologist</strong> manually.
+        
+        {realDbRole !== ROLES.ADMIN_TECH && (
+          <div className="bg-amber-900/30 border border-amber-900/50 p-4 rounded mb-4 text-sm text-amber-200">
+             <div className="font-bold flex items-center gap-2 mb-2"><AlertTriangle size={16} /> Permission Mismatch Detected</div>
+             Your database thinks you are a <strong>{realDbRole}</strong>, but you need to be an <strong>admin_technologist</strong> to manage the system. Run this SQL in your Supabase Dashboard to fix it permanently.
+          </div>
+        )}
+
+        <div className="relative group">
+            <div className="absolute top-2 right-2">
+                <button onClick={copyToClipboard} className="flex items-center gap-1 text-xs font-bold bg-slate-700 hover:bg-slate-600 text-white px-2 py-1 rounded transition-colors">
+                    {copied ? <CheckCircle size={12}/> : <Copy size={12}/>} {copied ? 'Copied' : 'Copy SQL'}
+                </button>
+            </div>
+            <pre className="bg-black p-4 rounded text-xs font-mono text-green-400 overflow-x-auto border border-slate-800">
+{fixCommand}
+            </pre>
+        </div>
+        <p className="mt-4 text-xs text-slate-500 flex items-center gap-2">
+            <Terminal size={12} /> Run this in: Supabase Dashboard &rarr; SQL Editor &rarr; New Query
         </p>
       </div>
 
@@ -407,285 +433,335 @@ export const ScheduleManager = () => {
 
 export const SemesterManager = () => {
   const { semesters, addSemester, toggleSemesterStatus } = useData();
-  const [isCreating, setIsCreating] = useState(false);
-  const [newYear, setNewYear] = useState(new Date().getFullYear());
-  const [newTerm, setNewTerm] = useState('Winter');
-  const [newCode, setNewCode] = useState('');
-  
-  const handleAdd = (e) => {
+  const [isAdding, setIsAdding] = useState(false);
+  const [newSemName, setNewSemName] = useState('');
+  const [newSemCode, setNewSemCode] = useState('');
+  const [newSemStart, setNewSemStart] = useState('');
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    addSemester({ 
-      name: `${newTerm} ${newYear}`, 
-      course_code: newCode, 
-      is_active: false, 
-      start_date: new Date().toISOString() 
-    });
-    setIsCreating(false);
-    setNewCode('');
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Semester Management</h2></div>
-        <Button onClick={() => setIsCreating(!isCreating)} variant="primary"><Plus size={18} /> New Semester</Button>
-      </div>
-      
-      {isCreating && (
-        <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50 mb-6">
-           <form onSubmit={handleAdd} className="flex gap-4 items-end">
-              <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Term</label><select value={newTerm} onChange={e=>setNewTerm(e.target.value)} className="border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100"><option>Winter</option><option>Fall</option><option>Summer</option></select></div>
-              <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Year</label><input type="number" value={newYear} onChange={e=>setNewYear(parseInt(e.target.value))} className="border p-2 rounded text-sm w-24 dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" /></div>
-              <div className="flex-1"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Course Code (Join Code)</label><input type="text" value={newCode} onChange={e=>setNewCode(e.target.value)} className="border p-2 rounded text-sm w-full dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" placeholder="e.g. W26JDB" required /></div>
-              <Button type="submit">Create</Button>
-           </form>
-        </div>
-      )}
-
-      <div className="grid gap-4">
-        {semesters.map(sem => (
-          <div key={sem.id} className="bg-white dark:bg-slate-900 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 flex justify-between items-center">
-            <div>
-              <div className="font-bold text-lg text-slate-800 dark:text-slate-100">{sem.name}</div>
-              <div className="text-xs text-slate-500 font-mono">Code: {sem.course_code || sem.courseCode}</div>
-            </div>
-            <div className="flex items-center gap-4">
-               {sem.is_active ? <span className="text-xs font-bold bg-green-100 text-green-800 px-2 py-1 rounded">Active</span> : <span className="text-xs font-bold bg-slate-100 text-slate-500 px-2 py-1 rounded">Archived</span>}
-               <Button variant="outline" onClick={() => toggleSemesterStatus(sem.id)}>{sem.is_active ? 'Archive' : 'Activate'}</Button>
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-export const ProgressMatrix = ({ onSelectStudent }) => {
-  const { currentSemesterId, enrollments, projects, projectStates, profiles } = useData();
-  const semesterEnrollments = enrollments.filter(e => e.semester_id === currentSemesterId);
-  const semesterProjects = projects.filter(p => p.semester_id === currentSemesterId);
-
-  const getStatusColor = (status) => {
-    switch(status) {
-      case 'approved': return 'bg-emerald-500';
-      case 'submitted': return 'bg-blue-500';
-      case 'changes_requested': return 'bg-amber-500';
-      case 'in_progress': return 'bg-slate-300 dark:bg-slate-600';
-      default: return 'bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700';
+    if(newSemName && newSemCode && newSemStart) {
+        await addSemester({ name: newSemName, course_code: newSemCode, start_date: newSemStart, is_active: false });
+        setIsAdding(false);
+        setNewSemName(''); setNewSemCode(''); setNewSemStart('');
     }
   };
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full text-left border-collapse">
-        <thead>
-          <tr>
-            <th className="p-2 min-w-[200px] bg-white dark:bg-slate-900 sticky left-0 z-10 border-b dark:border-slate-800">Student</th>
-            {semesterProjects.map(p => (
-              <th key={p.id} className="p-2 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase border-b dark:border-slate-800 text-center w-12" title={p.title}>
-                {p.code}
-              </th>
+    <div className="space-y-6">
+        <div className="flex justify-between items-center">
+            <div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Semesters</h2><p className="text-slate-500">Manage academic terms.</p></div>
+            <Button variant="primary" onClick={() => setIsAdding(!isAdding)}>{isAdding ? 'Cancel' : <><Plus size={18}/> New Semester</>}</Button>
+        </div>
+        
+        {isAdding && (
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50">
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Name</label><input type="text" value={newSemName} onChange={e => setNewSemName(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" placeholder="Winter 2025" required /></div>
+                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Course Code</label><input type="text" value={newSemCode} onChange={e => setNewSemCode(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" placeholder="MAD9000" required /></div>
+                        <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Start Date</label><input type="date" value={newSemStart} onChange={e => setNewSemStart(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required /></div>
+                    </div>
+                    <Button type="submit" variant="primary">Create Semester</Button>
+                </form>
+            </div>
+        )}
+
+        <div className="grid gap-4">
+            {semesters.map(sem => (
+                <div key={sem.id} className="bg-white dark:bg-slate-900 p-4 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 flex justify-between items-center">
+                    <div>
+                        <div className="font-bold text-lg text-slate-800 dark:text-slate-100">{sem.name}</div>
+                        <div className="text-sm text-slate-500">{sem.course_code} • Starts {new Date(sem.start_date).toLocaleDateString()}</div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                        {sem.is_active ? <span className="text-xs font-bold text-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 px-2 py-1 rounded">Active</span> : <span className="text-xs font-bold text-slate-400">Archived</span>}
+                        <Button variant={sem.is_active ? "outline" : "primary"} onClick={() => toggleSemesterStatus(sem.id)} className="text-xs">{sem.is_active ? 'Deactivate' : 'Activate'}</Button>
+                    </div>
+                </div>
             ))}
-          </tr>
-        </thead>
-        <tbody>
-          {semesterEnrollments.map(enrollment => {
-             const profile = profiles.find(p => p.id === enrollment.profile_id);
-             if (!profile) return null;
-             return (
-               <tr key={enrollment.id} className="border-b border-slate-50 dark:border-slate-800/50 hover:bg-slate-50 dark:hover:bg-slate-800/30">
-                 <td className="p-3 bg-white dark:bg-slate-900 sticky left-0 z-10 font-medium text-slate-700 dark:text-slate-300 cursor-pointer hover:text-emerald-500" onClick={() => onSelectStudent(profile.id)}>
-                   {profile.full_name}
-                 </td>
-                 {semesterProjects.map(p => {
-                    const state = projectStates.find(ps => ps.project_id === p.id && ps.student_id === profile.id);
-                    const status = state?.status || 'not_started';
-                    return (
-                      <td key={p.id} className="p-2 text-center">
-                        <div className={`w-4 h-4 rounded-full mx-auto ${getStatusColor(status)}`} title={status.replace('_', ' ')} />
-                      </td>
-                    );
-                 })}
-               </tr>
-             );
-          })}
-        </tbody>
-      </table>
+        </div>
     </div>
   );
-};
-
-export const StudentProfile = ({ studentId, onBack, onSelectProject }) => {
-   const { profiles, projects, projectStates, enrollments, currentSemesterId } = useData();
-   const student = profiles.find(p => p.id === studentId);
-   const semesterProjects = projects.filter(p => p.semester_id === currentSemesterId);
-   const enrollment = enrollments.find(e => e.profile_id === studentId && e.semester_id === currentSemesterId);
-
-   if (!student) return <div>Student not found</div>;
-
-   return (
-     <div className="space-y-6">
-       <Button variant="ghost" onClick={onBack}><ArrowLeft size={16}/> Back to List</Button>
-       <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400 font-bold text-2xl">
-            {student.full_name.charAt(0)}
-          </div>
-          <div>
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{student.full_name}</h2>
-            <div className="text-slate-500 dark:text-slate-400">{student.email}</div>
-            <div className="text-xs font-mono bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded inline-block mt-1">Tag: {enrollment?.tag_number || 'N/A'}</div>
-          </div>
-       </div>
-
-       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-         {semesterProjects.map(project => {
-            const state = projectStates.find(ps => ps.project_id === project.id && ps.student_id === studentId);
-            const status = state?.status || 'not_started';
-            return (
-              <div key={project.id} onClick={() => onSelectProject(project.id, studentId)} className="bg-white dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-800 hover:border-emerald-400 cursor-pointer transition-colors group">
-                 <div className="flex justify-between mb-2">
-                    <span className="text-xs font-bold bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded text-slate-500">{project.code}</span>
-                    <span className={`text-[10px] uppercase font-bold px-2 py-1 rounded-full ${status === 'approved' ? 'bg-green-100 text-green-800' : 'bg-slate-100 text-slate-500'}`}>{status.replace('_', ' ')}</span>
-                 </div>
-                 <h4 className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-500">{project.title}</h4>
-              </div>
-            );
-         })}
-       </div>
-     </div>
-   );
 };
 
 export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
-  const { user } = useAuth();
-  const { projects, projectStates, checkIns, addCheckIn, updateProjectStatus, updateInstructorNotes, profiles } = useData();
-  const project = projects.find(p => p.id === projectId);
-  
-  // If targetStudentId is provided (instructor view), use that. Otherwise use current user (student view).
-  const effectiveStudentId = targetStudentId || user.id;
-  const isInstructorView = !!targetStudentId; // Instructor viewing a student
-  
-  const projectState = projectStates.find(ps => ps.project_id === projectId && ps.student_id === effectiveStudentId);
-  const status = projectState?.status || 'not_started';
-  const projectCheckIns = checkIns.filter(c => c.project_id === projectId && c.student_id === effectiveStudentId);
-  
-  const [newCheckIn, setNewCheckIn] = useState('');
-  const [feedback, setFeedback] = useState(projectState?.instructor_notes || '');
-  
-  const handleCheckIn = (e) => {
-    e.preventDefault();
-    if (!newCheckIn.trim()) return;
-    addCheckIn({ projectId, studentId: effectiveStudentId, type: 'text', content: newCheckIn, imageMockUrl: null });
-    setNewCheckIn('');
-  };
+    const { projects, checkIns, addCheckIn, projectStates, updateInstructorNotes, updateProjectStatus } = useData();
+    const { user } = useAuth();
+    const project = projects.find(p => p.id === projectId);
+    const [note, setNote] = useState('');
+    const [checkInText, setCheckInText] = useState('');
+    
+    // Determine whose data we are looking at
+    const studentId = targetStudentId || user.id;
+    const isInstructor = user.role !== ROLES.STUDENT && targetStudentId;
+    
+    // Filter data for this project and student
+    const studentCheckIns = checkIns.filter(ci => ci.project_id === projectId && ci.student_id === studentId);
+    const currentState = projectStates.find(ps => ps.project_id === projectId && ps.student_id === studentId);
+    
+    // Instructor updates notes
+    const handleSaveNotes = () => {
+        updateInstructorNotes(projectId, studentId, note);
+    };
 
-  const handleStatusUpdate = (newStatus) => {
-      updateProjectStatus(projectId, effectiveStudentId, newStatus);
-  };
-  
-  const handleFeedbackSave = () => {
-      updateInstructorNotes(projectId, effectiveStudentId, feedback);
-  };
+    // Student posts check-in
+    const handleCheckIn = (e) => {
+        e.preventDefault();
+        if(!checkInText) return;
+        addCheckIn({ projectId, studentId, type: 'progress', content: checkInText, imageMockUrl: null });
+        setCheckInText('');
+    };
+    
+    const handleStatusChange = (newStatus) => {
+        updateProjectStatus(projectId, studentId, newStatus);
+    };
 
-  if (!project) return <div>Project not found</div>;
+    if (!project) return <div>Project not found</div>;
 
-  return (
-    <div className="space-y-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-4">
-          <Button variant="ghost" onClick={onBack}><ArrowLeft size={16}/></Button>
-          <div>
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{project.title}</h2>
-            <div className="text-slate-500 dark:text-slate-400">{project.code} {isInstructorView && `• ${profiles.find(p=>p.id===effectiveStudentId)?.full_name}`}</div>
-          </div>
-          <div className="ml-auto">
-             <div className="bg-slate-100 dark:bg-slate-800 px-3 py-1 rounded text-sm font-bold capitalize text-slate-700 dark:text-slate-300">
-               Status: {status.replace('_', ' ')}
-             </div>
-          </div>
-      </div>
-      
-      <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
-        <h3 className="font-bold text-lg mb-2 text-slate-800 dark:text-slate-100">Description</h3>
-        <p className="text-slate-600 dark:text-slate-300 leading-relaxed">{project.description}</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-         {/* LEFT: Check-ins */}
-         <div className="space-y-4">
-            <h3 className="font-bold text-slate-800 dark:text-slate-200">Activity Log</h3>
-            <div className="bg-white dark:bg-slate-900 rounded-lg border border-slate-200 dark:border-slate-800 p-4 max-h-[500px] overflow-y-auto space-y-4">
-               {projectCheckIns.length === 0 && <div className="text-center text-slate-400 py-8">No check-ins yet.</div>}
-               {projectCheckIns.map(ci => (
-                 <div key={ci.id} className={`flex gap-3 ${ci.type === 'instructor_comment' ? 'flex-row-reverse' : ''}`}>
-                    <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-xs font-bold ${ci.type === 'instructor_comment' ? 'bg-purple-100 text-purple-700' : 'bg-slate-100 text-slate-600'}`}>
-                      {ci.type === 'instructor_comment' ? 'INS' : 'STU'}
-                    </div>
-                    <div className={`p-3 rounded-lg text-sm max-w-[80%] ${ci.type === 'instructor_comment' ? 'bg-purple-50 text-purple-900 dark:bg-purple-900/20 dark:text-purple-100' : 'bg-slate-50 text-slate-800 dark:bg-slate-800 dark:text-slate-200'}`}>
-                       {ci.content}
-                       <div className="text-[10px] opacity-50 mt-1">{new Date(ci.created_at).toLocaleString()}</div>
-                    </div>
-                 </div>
-               ))}
-            </div>
+    return (
+        <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-300">
+            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-emerald-500 transition-colors mb-4"><ArrowLeft size={18} /> Back</button>
             
-            {!isInstructorView && (
-              <form onSubmit={handleCheckIn} className="flex gap-2">
-                 <input type="text" value={newCheckIn} onChange={e => setNewCheckIn(e.target.value)} className="flex-1 border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 rounded-lg px-4 py-2 text-sm focus:border-emerald-500 outline-none transition-colors" placeholder="Post an update..." />
-                 <Button type="submit" variant="primary"><Send size={16} /></Button>
-              </form>
-            )}
-         </div>
+            <div className="bg-white dark:bg-slate-900 rounded-3xl p-8 shadow-sm border border-slate-100 dark:border-slate-800">
+                <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-2">{project.title}</h1>
+                <p className="text-slate-600 dark:text-slate-400 text-lg leading-relaxed">{project.description}</p>
+                <div className="mt-6 flex flex-wrap gap-2">
+                    <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Code: {project.code}</span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${currentState?.status === 'submitted' ? 'bg-purple-100 text-purple-800' : currentState?.status === 'reviewed' ? 'bg-lime-100 text-lime-800' : 'bg-slate-100 text-slate-500'}`}>Status: {currentState?.status?.replace('_', ' ') || 'Not Started'}</span>
+                </div>
+            </div>
 
-         {/* RIGHT: Controls (Instructor) or Status (Student) */}
-         <div className="space-y-4">
-            {isInstructorView ? (
-              <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-purple-200 dark:border-purple-900/50">
-                 <h3 className="font-bold text-purple-900 dark:text-purple-300 mb-4 flex items-center gap-2"><Shield size={16}/> Instructor Controls</h3>
-                 
-                 <div className="mb-4">
-                   <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Change Status</label>
-                   <div className="flex flex-wrap gap-2">
-                     {['not_started', 'in_progress', 'submitted', 'changes_requested', 'approved'].map(s => (
-                       <button key={s} onClick={() => handleStatusUpdate(s)} className={`px-3 py-1 rounded text-xs font-bold border transition-colors ${status === s ? 'bg-emerald-500 text-white border-emerald-500' : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:border-emerald-300'}`}>
-                         {s.replace('_', ' ')}
-                       </button>
-                     ))}
-                   </div>
-                 </div>
-
-                 <div className="mb-4">
-                    <label className="block text-xs font-bold text-slate-500 uppercase mb-2">Feedback / Notes</label>
-                    <textarea className="w-full border border-slate-200 dark:border-slate-700 rounded p-2 text-sm dark:bg-slate-800" rows={4} value={feedback} onChange={e => setFeedback(e.target.value)} placeholder="Enter feedback here..."></textarea>
-                 </div>
-                 <Button fullWidth onClick={handleFeedbackSave}>Save Feedback</Button>
-              </div>
-            ) : (
-               <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
-                  <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4">Submission</h3>
-                  {status === 'approved' ? (
-                     <div className="text-center py-8">
-                        <div className="w-16 h-16 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-4"><CheckCircle size={32} /></div>
-                        <h4 className="text-xl font-bold text-green-700 mb-1">Project Approved!</h4>
-                        <p className="text-green-600 text-sm">Great job. No further action needed.</p>
-                     </div>
-                  ) : (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* CHECK-INS / ACTIVITY STREAM */}
+                <div className="space-y-4">
+                    <h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Clock size={18}/> Activity Stream</h3>
                     <div className="space-y-4">
-                       <p className="text-sm text-slate-500">Ready to submit your work for review?</p>
-                       <Button fullWidth variant={status === 'submitted' ? 'secondary' : 'primary'} onClick={() => handleStatusUpdate('submitted')} disabled={status === 'submitted'}>
-                          {status === 'submitted' ? 'Resubmit for Review' : 'Submit for Review'}
-                       </Button>
-                       {projectState?.instructor_notes && (
-                         <div className="mt-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-900/50 rounded-lg">
-                            <div className="text-xs font-bold text-amber-800 dark:text-amber-400 uppercase mb-1">Instructor Feedback</div>
-                            <p className="text-sm text-amber-900 dark:text-amber-100">{projectState.instructor_notes}</p>
-                         </div>
-                       )}
+                        {studentCheckIns.length === 0 && <div className="p-8 text-center bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-400">No activity recorded yet.</div>}
+                        {studentCheckIns.map(ci => (
+                            <div key={ci.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex gap-4">
+                                <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-500">
+                                    {ci.type === 'instructor_comment' ? <Shield size={18} /> : <User size={18} />}
+                                </div>
+                                <div>
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{ci.type === 'instructor_comment' ? 'Instructor' : 'Student'}</span>
+                                        <span className="text-xs text-slate-400">{new Date(ci.created_at).toLocaleString()}</span>
+                                    </div>
+                                    <p className="text-slate-600 dark:text-slate-400 text-sm">{ci.content}</p>
+                                    {ci.image_url && <div className="mt-2 h-20 w-32 bg-slate-200 dark:bg-slate-800 rounded-lg flex items-center justify-center text-xs text-slate-400">Image Mock</div>}
+                                </div>
+                            </div>
+                        ))}
                     </div>
-                  )}
-               </div>
-            )}
-         </div>
-      </div>
-    </div>
-  );
+                    
+                    {!isInstructor ? (
+                        <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 sticky bottom-4 shadow-xl">
+                            <form onSubmit={handleCheckIn}>
+                                <textarea 
+                                    value={checkInText}
+                                    onChange={e => setCheckInText(e.target.value)}
+                                    placeholder="Post an update..."
+                                    className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none mb-2"
+                                    rows={3}
+                                />
+                                <div className="flex justify-between items-center">
+                                    <div className="flex gap-2">
+                                        <button type="button" className="p-2 text-slate-400 hover:text-emerald-500"><Camera size={18}/></button>
+                                        <button type="button" onClick={() => handleStatusChange('submitted')} className="text-xs font-bold text-emerald-600 hover:text-emerald-500 px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">Mark as Submitted</button>
+                                    </div>
+                                    <Button type="submit" size="sm" disabled={!checkInText}><Send size={14}/> Post</Button>
+                                </div>
+                            </form>
+                        </div>
+                    ) : (
+                        <div className="bg-slate-900 p-4 rounded-xl text-white sticky bottom-4 shadow-xl">
+                            <h4 className="font-bold text-sm mb-2 text-emerald-400">Instructor Feedback</h4>
+                            <textarea 
+                                value={note} 
+                                onChange={e => setNote(e.target.value)} 
+                                className="w-full bg-black/30 border border-white/10 rounded p-2 text-sm text-white outline-none focus:border-emerald-500 mb-2" 
+                                placeholder="Add grading notes or private feedback..."
+                                defaultValue={currentState?.instructor_notes || ''}
+                            />
+                            <div className="flex justify-between items-center">
+                                <div className="flex gap-2">
+                                    <button onClick={() => handleStatusChange('reviewed')} className="px-3 py-1 bg-lime-500/20 text-lime-400 text-xs font-bold rounded hover:bg-lime-500/30">Mark Reviewed</button>
+                                    <button onClick={() => handleStatusChange('revision_requested')} className="px-3 py-1 bg-red-500/20 text-red-400 text-xs font-bold rounded hover:bg-red-500/30">Request Revision</button>
+                                </div>
+                                <Button onClick={handleSaveNotes} size="sm">Save Notes</Button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* PROJECT RESOURCES / STATUS (Simplified) */}
+                <div>
+                     <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl">
+                        <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4">Resources</h3>
+                        <ul className="space-y-2 text-sm text-emerald-600 dark:text-emerald-400">
+                            <li className="flex items-center gap-2 cursor-pointer hover:underline"><Download size={14}/> Project Brief.pdf</li>
+                            <li className="flex items-center gap-2 cursor-pointer hover:underline"><Download size={14}/> Starter_Code.zip</li>
+                            <li className="flex items-center gap-2 cursor-pointer hover:underline"><HelpCircle size={14}/> Grading Rubric</li>
+                        </ul>
+                     </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+export const ProgressMatrix = ({ onSelectStudent }) => {
+    const { projects, enrollments, currentSemesterId, projectStates, profiles } = useData();
+    const semesterProjects = projects.filter(p => p.semester_id === currentSemesterId).sort((a,b) => a.sequence_order - b.sequence_order);
+    const semesterEnrollments = enrollments.filter(e => e.semester_id === currentSemesterId).sort((a,b) => parseInt(a.tag_number || 0) - parseInt(b.tag_number || 0));
+
+    const getStatusColor = (status) => {
+        switch(status) {
+            case 'reviewed': return 'bg-lime-400';
+            case 'submitted': return 'bg-purple-400';
+            case 'in_progress': return 'bg-amber-400';
+            case 'revision_requested': return 'bg-red-400';
+            default: return 'bg-slate-200 dark:bg-slate-700';
+        }
+    };
+
+    return (
+        <div className="space-y-6">
+            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Progress Matrix</h2>
+            <div className="overflow-x-auto pb-4">
+                <div className="min-w-max bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
+                    <table className="w-full text-left border-collapse">
+                        <thead>
+                            <tr>
+                                <th className="p-4 border-b border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 sticky left-0 z-10 w-48 font-bold text-slate-600 dark:text-slate-300">Student</th>
+                                {semesterProjects.map(p => (
+                                    <th key={p.id} className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-500 uppercase text-center w-24">
+                                        <div className="truncate w-24" title={p.title}>{p.code}</div>
+                                    </th>
+                                ))}
+                                <th className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-500 uppercase text-center">Avg</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {semesterEnrollments.map(enrollment => {
+                                const profile = profiles.find(p => p.id === enrollment.profile_id);
+                                const displayName = profile ? profile.full_name : (enrollment.email || 'Unknown');
+                                const displayTag = enrollment.tag_number || '??';
+                                
+                                // Simple completion calculation
+                                let completedCount = 0;
+
+                                return (
+                                    <tr key={enrollment.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+                                        <td className="p-3 border-b border-r border-slate-100 dark:border-slate-800 sticky left-0 bg-white dark:bg-slate-900 z-10">
+                                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => onSelectStudent && onSelectStudent(enrollment.profile_id)}>
+                                                <span className="font-mono text-xs font-bold text-slate-400 w-6">{displayTag}</span>
+                                                <span className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate w-32">{displayName}</span>
+                                            </div>
+                                        </td>
+                                        {semesterProjects.map(p => {
+                                            const state = projectStates.find(ps => ps.project_id === p.id && ps.student_id === enrollment.profile_id);
+                                            const status = state?.status || 'not_started';
+                                            if (status === 'reviewed' || status === 'submitted') completedCount++;
+                                            
+                                            return (
+                                                <td key={p.id} className="p-3 border-b border-slate-100 dark:border-slate-800 text-center">
+                                                    <div 
+                                                        className={`w-4 h-4 rounded-full mx-auto ${getStatusColor(status)} cursor-pointer hover:scale-125 transition-transform`} 
+                                                        title={status}
+                                                        onClick={() => onSelectStudent && onSelectStudent(enrollment.profile_id)} // Ideally could open specific project detail
+                                                    />
+                                                </td>
+                                            );
+                                        })}
+                                        <td className="p-3 border-b border-slate-100 dark:border-slate-800 text-center font-mono text-xs font-bold text-slate-500">
+                                            {semesterProjects.length > 0 ? Math.round((completedCount / semesterProjects.length) * 100) : 0}%
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div className="flex gap-4 text-xs text-slate-500">
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-lime-400"></div> Reviewed</div>
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-400"></div> Submitted</div>
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-amber-400"></div> In Progress</div>
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-red-400"></div> Revision Needed</div>
+                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-200 dark:bg-slate-700"></div> No Status</div>
+            </div>
+        </div>
+    );
+};
+
+export const StudentProfile = ({ studentId, onBack, onSelectProject }) => {
+    const { profiles, enrollments, checkIns, projects, projectStates, currentSemesterId } = useData();
+    const student = profiles.find(p => p.id === studentId);
+    const enrollment = enrollments.find(e => e.profile_id === studentId && e.semester_id === currentSemesterId);
+    const studentProjects = projects.filter(p => p.semester_id === currentSemesterId);
+    
+    // Sort projects by sequence
+    studentProjects.sort((a,b) => a.sequence_order - b.sequence_order);
+
+    if (!student) return <div>Student not found</div>;
+
+    return (
+        <div className="space-y-6">
+            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-emerald-500 transition-colors mb-4"><ArrowLeft size={18} /> Back to Roster</button>
+
+            <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 flex items-start gap-6">
+                 <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-3xl font-bold text-emerald-600 dark:text-emerald-400">
+                     {student.full_name?.charAt(0) || student.email?.charAt(0)}
+                 </div>
+                 <div>
+                     <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{student.full_name}</h1>
+                     <div className="text-slate-500">{student.email}</div>
+                     <div className="mt-2 flex gap-2">
+                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-600 dark:text-slate-300">Tag #{enrollment?.tag_number || 'N/A'}</span>
+                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-600 dark:text-slate-300">ID: {enrollment?.student_number || 'N/A'}</span>
+                     </div>
+                 </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div>
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 mb-4">Project Progress</h3>
+                    <div className="space-y-3">
+                        {studentProjects.map(project => {
+                             const state = projectStates.find(ps => ps.project_id === project.id && ps.student_id === studentId);
+                             const status = state?.status || 'not_started';
+                             return (
+                                 <div key={project.id} onClick={() => onSelectProject(project.id, studentId)} className="bg-white dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-800 flex justify-between items-center cursor-pointer hover:border-emerald-500 transition-colors group">
+                                     <div>
+                                         <div className="text-xs font-bold text-slate-400">{project.code}</div>
+                                         <div className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-500 transition-colors">{project.title}</div>
+                                     </div>
+                                     <div className={`text-xs font-bold px-3 py-1 rounded-full uppercase ${status === 'reviewed' ? 'bg-lime-100 text-lime-800' : status === 'submitted' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-500'}`}>
+                                         {status.replace('_', ' ')}
+                                     </div>
+                                 </div>
+                             );
+                        })}
+                    </div>
+                </div>
+                <div>
+                    <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 mb-4">Recent Activity</h3>
+                    <div className="space-y-4">
+                        {checkIns.filter(ci => ci.student_id === studentId).slice(0, 5).map(ci => (
+                             <div key={ci.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
+                                 <div className="flex justify-between text-xs text-slate-400 mb-1">
+                                     <span>{new Date(ci.created_at).toLocaleDateString()}</span>
+                                     <span className="capitalize">{ci.type}</span>
+                                 </div>
+                                 <p className="text-sm text-slate-700 dark:text-slate-300">{ci.content}</p>
+                             </div>
+                        ))}
+                        {checkIns.filter(ci => ci.student_id === studentId).length === 0 && <div className="text-slate-400 text-sm">No activity log.</div>}
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 };
