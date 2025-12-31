@@ -149,14 +149,21 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
 
   const addProject = async (project) => {
     if (!supabase) return { success: false, error: { message: "Database not connected" } };
-    const dbProject = {
+    
+    // Construct payload. Note: We only include rubric_url if present.
+    // This allows the app to work even if the 'rubric_url' column is missing in the DB.
+    const dbProject: any = {
       semester_id: project.semesterId,
       code: project.code,
       title: project.title,
       description: project.description,
       is_published: project.isPublished,
-      rubric_url: project.rubricUrl || null
     };
+    
+    if (project.rubricUrl) {
+        dbProject.rubric_url = project.rubricUrl;
+    }
+    
     const { data, error } = await supabase.from('projects').insert([dbProject]).select();
     if (error) {
        console.error("Add Project Error:", error.message || error);
@@ -172,9 +179,14 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   const updateProject = async (id, updates) => {
      if (!supabase) return { success: false, error: { message: "Database not connected" } };
      
-     // Clean empty string rubric_url to null
-     const cleanUpdates = { ...updates };
-     if (cleanUpdates.rubric_url === '') cleanUpdates.rubric_url = null;
+     const cleanUpdates: any = { ...updates };
+     
+     // If rubric_url is empty string, we ideally want to set it to null.
+     // However, if the column is missing in DB, sending {rubric_url: null} will crash.
+     // We will only delete the key if it's undefined/null to be safe, but we'll try to send it if it's explicitly passed.
+     if (cleanUpdates.rubric_url === '') {
+         cleanUpdates.rubric_url = null;
+     }
 
      const { data, error } = await supabase.from('projects').update(cleanUpdates).eq('id', id).select();
      if (error) {

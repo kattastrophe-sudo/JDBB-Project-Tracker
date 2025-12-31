@@ -86,8 +86,10 @@ export const AdminSettings = () => {
   const fixCommand = `UPDATE profiles SET role = 'admin_technologist' WHERE email = '${user.email}';
 ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(fixCommand);
+  const schemaFixCommand = `ALTER TABLE projects ADD COLUMN IF NOT EXISTS rubric_url text;`;
+
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -123,7 +125,7 @@ ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
       
       {/* DEVELOPER TOOLS */}
       <div className="bg-slate-900 text-slate-200 p-6 rounded-lg border border-slate-700">
-        <h3 className="font-bold flex items-center gap-2 mb-4 text-emerald-400"><Database size={18} /> Developer Tools: Permissions Fix</h3>
+        <h3 className="font-bold flex items-center gap-2 mb-4 text-emerald-400"><Database size={18} /> Developer Tools</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm font-mono mb-6">
             <div className="bg-slate-950 p-3 rounded border border-slate-800">
                 <div className="text-slate-500 text-xs uppercase mb-1">App UI Role (Local)</div>
@@ -137,25 +139,34 @@ ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
             </div>
         </div>
         
-        {realDbRole !== ROLES.ADMIN_TECH && (
-          <div className="space-y-4">
-             <div className="bg-amber-900/30 border border-amber-900/50 p-4 rounded text-sm text-amber-200">
-                 <div className="font-bold flex items-center gap-2 mb-2"><AlertTriangle size={16} /> Permission Mismatch Detected</div>
-                 Your database thinks you are a <strong>{realDbRole}</strong>. You have two options to fix this:
-             </div>
-
+        <div className="space-y-4">
+             {realDbRole !== ROLES.ADMIN_TECH && (
+                 <div className="bg-amber-900/30 border border-amber-900/50 p-4 rounded text-sm text-amber-200 mb-4">
+                     <div className="font-bold flex items-center gap-2 mb-2"><AlertTriangle size={16} /> Permission Mismatch Detected</div>
+                     Your database thinks you are a <strong>{realDbRole}</strong>.
+                 </div>
+             )}
+             
              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                  <div className="bg-slate-950 p-4 rounded border border-slate-800">
-                    <h4 className="font-bold text-emerald-400 mb-2">Option A: Run SQL (Preferred)</h4>
-                    <p className="text-xs text-slate-400 mb-3">Copy this command and run it in your Supabase SQL Editor.</p>
+                    <h4 className="font-bold text-emerald-400 mb-2">Fix: Set Admin Role</h4>
                     <div className="relative group mb-2">
                         <pre className="bg-black p-3 rounded text-[10px] font-mono text-slate-300 overflow-x-auto border border-slate-800">{fixCommand}</pre>
-                        <button onClick={copyToClipboard} className="absolute top-1 right-1 text-xs bg-slate-800 text-white px-2 py-1 rounded">{copied ? 'Copied' : 'Copy'}</button>
+                        <button onClick={() => copyToClipboard(fixCommand)} className="absolute top-1 right-1 text-xs bg-slate-800 text-white px-2 py-1 rounded">Copy</button>
+                    </div>
+                 </div>
+                 
+                 <div className="bg-slate-950 p-4 rounded border border-slate-800">
+                    <h4 className="font-bold text-emerald-400 mb-2">Fix: Add Missing Rubric Column</h4>
+                    <p className="text-[10px] text-slate-400 mb-1">Run this if you see "Could not find 'rubric_url' column".</p>
+                    <div className="relative group mb-2">
+                        <pre className="bg-black p-3 rounded text-[10px] font-mono text-slate-300 overflow-x-auto border border-slate-800">{schemaFixCommand}</pre>
+                        <button onClick={() => copyToClipboard(schemaFixCommand)} className="absolute top-1 right-1 text-xs bg-slate-800 text-white px-2 py-1 rounded">Copy</button>
                     </div>
                  </div>
 
-                 <div className="bg-slate-950 p-4 rounded border border-slate-800">
-                    <h4 className="font-bold text-pink-400 mb-2">Option B: Emergency Key</h4>
+                 <div className="bg-slate-950 p-4 rounded border border-slate-800 md:col-span-2">
+                    <h4 className="font-bold text-pink-400 mb-2">Emergency Key Upgrade</h4>
                     <p className="text-xs text-slate-400 mb-3">Paste your <code>service_role</code> key here to force-update your account now.</p>
                     <div className="flex gap-2">
                         <input type="password" value={serviceKey} onChange={e => setServiceKey(e.target.value)} placeholder="eyJh..." className="flex-1 bg-black border border-slate-700 rounded px-2 py-1 text-xs text-white outline-none focus:border-pink-500" />
@@ -166,8 +177,7 @@ ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
                     {fixMsg && <div className="mt-2 text-xs font-bold text-white">{fixMsg}</div>}
                  </div>
              </div>
-          </div>
-        )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-6"><div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6"><div className="flex justify-between items-start mb-4"><h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Settings size={18} /> Configuration</h3><Button onClick={handleRunReminders} disabled={isRunning} variant="primary">{isRunning ? 'Sending...' : <><Play size={16} /> Run Daily Reminders</>}</Button></div><div className="grid grid-cols-1 md:grid-cols-2 gap-4"><div className="p-4 rounded border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50"><div className="text-xs font-bold text-slate-500 uppercase mb-1">Timezone</div><div className="font-mono text-sm text-slate-800 dark:text-slate-200">America/Toronto</div></div></div></div><div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden"><div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900"><h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2"><Mail size={18} /> Notification Log</h3></div><table className="w-full text-left"><thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-100 dark:border-slate-800"><tr><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Time</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Recipient</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Status</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{notificationLogs.map(log => (<tr key={log.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50"><td className="px-6 py-4 text-xs text-slate-500">{new Date(log.date).toLocaleTimeString()}</td><td className="px-6 py-4 text-sm font-medium text-slate-700 dark:text-slate-300">{log.recipient}</td><td className="px-6 py-4"><span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${log.status === 'Sent' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{log.status}</span></td></tr>))}</tbody></table></div></div>
