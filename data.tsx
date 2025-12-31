@@ -231,34 +231,44 @@ export const DataProvider = ({ children }) => {
   };
   
   const addStudentToSemester = async (studentData, semesterId) => {
-     if (!supabase) return;
+     if (!supabase) return { success: false, error: 'Database not connected' };
      
-     // 1. Try to find existing profile
-     const { data: profileData } = await supabase.from('profiles').select('id').eq('email', studentData.email).single();
-     
-     // 2. Prepare payload. If profile exists, link it. If not, link email only (Pending).
-     const enrollmentPayload = {
-         profile_id: profileData ? profileData.id : null, 
-         email: studentData.email,
-         semester_id: semesterId,
-         student_number: studentData.studentNumber,
-         tag_number: studentData.tagNumber,
-         status: 'active'
-     };
+     try {
+         // 1. Try to find existing profile. Use maybeSingle to avoid errors if not found.
+         const { data: profileData } = await supabase
+            .from('profiles')
+            .select('id')
+            .eq('email', studentData.email)
+            .maybeSingle();
+         
+         // 2. Prepare payload. If profile exists, link it. If not, link email only (Pending).
+         const enrollmentPayload = {
+             profile_id: profileData ? profileData.id : null, 
+             email: studentData.email,
+             semester_id: semesterId,
+             student_number: studentData.studentNumber,
+             tag_number: studentData.tagNumber,
+             status: 'active'
+         };
 
-     const { data, error } = await supabase.from('enrollments').insert([enrollmentPayload]).select();
+         const { data, error } = await supabase.from('enrollments').insert([enrollmentPayload]).select();
 
-     if (error) {
-         console.error("Add student error:", error);
-         alert("Failed to add student. Ensure Tag Number is unique.");
-         return;
-     }
+         if (error) {
+             console.error("Add student error:", error);
+             return { success: false, error: error.message };
+         }
 
-     if (data) {
-         setEnrollments(prev => [...prev, data[0]]);
-         // Refresh profiles just in case
-         const { data: p } = await supabase.from('profiles').select('*');
-         if(p) setProfiles(p);
+         if (data) {
+             setEnrollments(prev => [...prev, data[0]]);
+             // Refresh profiles just in case
+             const { data: p } = await supabase.from('profiles').select('*');
+             if(p) setProfiles(p);
+             return { success: true };
+         }
+         return { success: false, error: 'Unknown error occurred' };
+     } catch (err) {
+         console.error("Unexpected error adding student:", err);
+         return { success: false, error: err.message };
      }
   };
 
