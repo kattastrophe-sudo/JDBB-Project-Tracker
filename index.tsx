@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { User, Shield, Users, CheckCircle, ArrowLeft, LogIn, AlertCircle, Database, Save, PlusCircle } from 'lucide-react';
-import { ThemeProvider, AuthProvider, DataProvider, useAuth, ROLES, COLORS, isSupabaseConfigured, saveConfiguration, clearConfiguration } from './data';
+import { ThemeProvider, AuthProvider, DataProvider, useAuth } from './data';
+import { ROLES, COLORS, isSupabaseConfigured, saveConfiguration, clearConfiguration } from './config';
 import { Navbar, Sidebar, Button } from './components';
-import { StudentDashboard, AdminDashboard, SemesterManager, ProjectManager, ProjectDetail, StudentProfile, ScheduleManager, ProgressMatrix, RosterManager, AdminSettings } from './views';
+
+// View Imports
+import { AdminDashboard, AdminSettings, RosterManager, SemesterManager } from './views/admin';
+import { StudentDashboard, StudentProfile } from './views/student';
+import { ProjectManager, ProjectDetail, ScheduleManager, ProgressMatrix } from './views/project';
 
 // --- Setup Screen ---
 const SetupScreen = () => {

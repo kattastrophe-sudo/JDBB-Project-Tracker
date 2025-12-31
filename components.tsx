@@ -1,5 +1,6 @@
 import React from 'react';
-import { COLORS, ROLES, useAuth, useTheme, useData } from './data';
+import { useAuth, useTheme, useData } from './data';
+import { COLORS, ROLES } from './config';
 import { Layout, Tag, Calendar, BarChart3, Users, Shield, Settings, Menu, Sun, Moon, LogOut } from 'lucide-react';
 
 export const Button = ({ children, onClick, variant = 'primary', className = '', fullWidth = false, disabled = false, type = 'button' }: any) => {

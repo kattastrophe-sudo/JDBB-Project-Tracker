@@ -1,64 +1,5 @@
 import React, { useState, createContext, useContext, useEffect } from 'react';
-import { createClient } from '@supabase/supabase-js';
-
-// --- SUPABASE CONFIGURATION ---
-// We check LocalStorage first to allow UI-based configuration, then fall back to code constants.
-const STORED_URL = localStorage.getItem('jdbb_supabase_url');
-const STORED_KEY = localStorage.getItem('jdbb_supabase_key');
-
-// HARDCODED CREDENTIALS
-const CODE_URL = 'https://yqptmvtlsjyuxtzaegun.supabase.co';
-const CODE_KEY: string = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxcHRtdnRsc2p5dXh0emFlZ3VuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcxNDcwODcsImV4cCI6MjA4MjcyMzA4N30.N7jNEZ46E1GvMTLBtm7N494hQqiho-szgvAWchSHvnE';
-
-// Helper to validate URL format
-const isValidUrl = (urlString) => {
-  try { 
-    return Boolean(new URL(urlString)); 
-  } catch(e) { 
-    return false; 
-  }
-};
-
-export const activeUrl = isValidUrl(STORED_URL) ? STORED_URL : (isValidUrl(CODE_URL) ? CODE_URL : null);
-const activeKey = STORED_KEY || (CODE_KEY !== 'INSERT_YOUR_SUPABASE_ANON_KEY_HERE' ? CODE_KEY : null);
-
-export const isSupabaseConfigured = Boolean(activeUrl && activeKey);
-
-// Safely initialize client. If not configured, this remains null but doesn't crash the app.
-export const supabase = isSupabaseConfigured ? createClient(activeUrl, activeKey) : null;
-
-export const saveConfiguration = (url, key) => {
-  localStorage.setItem('jdbb_supabase_url', url);
-  localStorage.setItem('jdbb_supabase_key', key);
-  window.location.reload();
-};
-
-export const clearConfiguration = () => {
-  localStorage.removeItem('jdbb_supabase_url');
-  localStorage.removeItem('jdbb_supabase_key');
-  window.location.reload();
-};
-
-// --- JDBB Design System & Constants ---
-
-export const COLORS = {
-  limeCream: '#BCE784',   // Success, Review, Positive
-  emerald: '#5DD39E',     // Primary Action, Active
-  pacificCyan: '#348AA7', // Info, Timeline, Neutral
-  dustyGrape: '#525174',  // Secondary, Admin Structure
-  vintageGrape: '#513B56',// Alerts, Overdue, Emphasis
-  white: '#FFFFFF',
-  textMain: '#1E293B',    // Slate 800
-  textLight: '#64748B',   // Slate 500
-};
-
-// Updated to match Database Enums
-export const ROLES = {
-  ADMIN_TECH: 'admin_technologist',
-  ADMIN_INSTRUCTOR: 'admin_instructor',
-  MONITOR: 'monitor',
-  STUDENT: 'student',
-};
+import { supabase, ROLES, isSupabaseConfigured } from './config';
 
 // --- Contexts ---
 
@@ -98,13 +39,10 @@ export const DataProvider = ({ children }) => {
   // Auto-link pending enrollments when a user logs in
   const linkPendingEnrollments = async (email, userId) => {
     if (!supabase) return;
-    // Find enrollments with this email but NO profile_id
     const { data: pending } = await supabase.from('enrollments').select('id').eq('email', email).is('profile_id', null);
     
     if (pending && pending.length > 0) {
-       // Update them to belong to this new user
        await supabase.from('enrollments').update({ profile_id: userId }).in('id', pending.map(p => p.id));
-       // Trigger a refresh of enrollments
        const { data: refreshed } = await supabase.from('enrollments').select('*');
        if (refreshed) setEnrollments(refreshed);
     }
@@ -132,7 +70,6 @@ export const DataProvider = ({ children }) => {
     const fetchData = async () => {
       setLoading(true);
       try {
-        // Parallel fetching
         const [
           semestersRes, 
           projectsRes, 
@@ -221,7 +158,7 @@ export const DataProvider = ({ children }) => {
     const { data, error } = await supabase.from('projects').insert([dbProject]).select();
     if (error) {
        console.error("Add Project Error:", error);
-       alert("Failed to add project. " + (error.code === '42501' ? "Permission denied. Please fix your database role in Settings > Developer Tools." : error.message));
+       alert("Failed to add project. " + (error.code === '42501' ? "Permission denied." : error.message));
     }
     if (data) setProjects(prev => [...prev, data[0]]);
   };
@@ -237,7 +174,7 @@ export const DataProvider = ({ children }) => {
     const { data, error } = await supabase.from('schedule_items').insert([dbItem]).select();
     if (error) {
        console.error("Add Schedule Item Error:", error);
-       alert("Failed to add item. " + (error.code === '42501' ? "Permission denied. Please fix your database role in Settings > Developer Tools." : error.message));
+       alert("Failed to add item. " + (error.code === '42501' ? "Permission denied." : error.message));
     }
     if (data) setScheduleItems(prev => [...prev, data[0]].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
   };
@@ -246,15 +183,12 @@ export const DataProvider = ({ children }) => {
      if (!supabase) return { success: false, error: 'Database not connected' };
      
      try {
-         // 1. Try to find existing profile. Use maybeSingle to avoid errors if not found.
          const { data: profileData } = await supabase
             .from('profiles')
             .select('id')
             .eq('email', studentData.email)
             .maybeSingle();
          
-         // SECURITY FIX: Enforce "Sign Up First" policy.
-         // This prevents 42501 (RLS) errors because we don't attempt to create "Pending" students with null profile_ids.
          if (!profileData) {
              return { 
                  success: false, 
@@ -262,7 +196,6 @@ export const DataProvider = ({ children }) => {
              };
          }
          
-         // 2. Prepare payload with GUARANTEED profile_id
          const enrollmentPayload = {
              profile_id: profileData.id, 
              email: studentData.email,
@@ -278,17 +211,14 @@ export const DataProvider = ({ children }) => {
              let errorMessage = error.message || "Unknown database error";
              const details = error.details || '';
              
-             // Check for unique constraint violation (Code 23505)
              if (error.code === '23505') {
                 if (errorMessage.includes('tag_number') || details.includes('tag_number')) errorMessage = `Tag Number #${studentData.tagNumber} is already taken in this semester.`;
                 else if (errorMessage.includes('student_number') || details.includes('student_number')) errorMessage = `Student Number ${studentData.studentNumber} is already enrolled.`;
                 else if (errorMessage.includes('email') || details.includes('email')) errorMessage = `Email ${studentData.email} is already enrolled.`;
                 else errorMessage = "Duplicate entry found. This student or tag number is already enrolled.";
              }
-             // Check for RLS Policy violation (Code 42501)
              else if (error.code === '42501') {
-                 // Suppress noisy console error for RLS, as we show a UI message
-                 console.warn("RLS Permission Error caught in addStudentToSemester (User likely not admin in DB).");
+                 console.warn("RLS Permission Error caught in addStudentToSemester.");
                  errorMessage = "Permission Denied: Your database role is likely set to 'Student'. Please go to Settings > Developer Tools to fix your permissions.";
              } else {
                  console.error("Add student error details:", JSON.stringify(error, null, 2));
@@ -311,26 +241,19 @@ export const DataProvider = ({ children }) => {
 
   const joinSemester = async (courseCode, studentNumber) => {
       if (!supabase || !user) return { success: false, error: "Not logged in" };
-      
       try {
-          // 1. Find Semester
           const { data: semester } = await supabase.from('semesters').select('id, name').eq('course_code', courseCode).eq('is_active', true).single();
           if (!semester) return { success: false, error: "Invalid or inactive Course Code." };
           
-          // 2. Check if already enrolled
           const { data: existing } = await supabase.from('enrollments').select('id').eq('semester_id', semester.id).eq('profile_id', user.id).maybeSingle();
           if (existing) return { success: false, error: "You are already enrolled in this semester." };
           
-          // 3. Enroll Self
-          // Note: Tag Number is hard to auto-assign safely without race conditions on client-side. 
-          // We set it to '00' or similar for now, admin can update it. Or user picks it? 
-          // For simplicity, we assign a random available one or '00'.
           const { data, error } = await supabase.from('enrollments').insert([{
               profile_id: user.id,
               email: user.email,
               semester_id: semester.id,
               student_number: studentNumber,
-              tag_number: '00', // Admin must assign proper tag
+              tag_number: '00',
               status: 'active'
           }]).select();
 
@@ -357,16 +280,12 @@ export const DataProvider = ({ children }) => {
     try {
         const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', userId);
         if (error) {
-            // Check for RLS Policy violation (Code 42501)
              if (error.code === '42501') {
                  return { success: false, error: "Permission Denied: You are not authorized to change user roles. Check Settings > Developer Tools." };
              }
              throw error;
         }
-        
-        // Optimistic update
         setProfiles(prev => prev.map(p => p.id === userId ? { ...p, role: newRole } : p));
-        
         return { success: true };
     } catch (e: any) {
         return { success: false, error: e.message || "Failed to update role" };
@@ -478,7 +397,6 @@ export const AuthProvider = ({ children }) => {
               name: data.full_name || authUser.email
           });
       } else {
-          // If profile missing, fallback (likely just created account)
           setUser({
             id: authUser.id,
             email: authUser.email,
