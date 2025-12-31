@@ -8,7 +8,7 @@ export const ThemeContext = createContext({
   toggleTheme: () => {}
 });
 
-export const ThemeProvider = ({ children }) => {
+export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const [isDark, setIsDark] = useState(true);
   useEffect(() => {
     if (isDark) {
@@ -23,7 +23,7 @@ export const ThemeProvider = ({ children }) => {
 
 export const DataContext = createContext(null);
 
-export const DataProvider = ({ children }) => {
+export const DataProvider = ({ children }: { children: React.ReactNode }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [semesters, setSemesters] = useState([]);
@@ -299,7 +299,7 @@ export const DataProvider = ({ children }) => {
       student_id: checkIn.studentId,
       type: checkIn.type,
       content: checkIn.content,
-      image_url: checkIn.imageMockUrl
+      image_url: checkIn.imageMockUrl // Now receives actual URL if uploaded
     };
     const { data } = await supabase.from('check_ins').insert([dbCheckIn]).select();
     if (data) {
@@ -308,6 +308,29 @@ export const DataProvider = ({ children }) => {
             updateProjectStatus(checkIn.projectId, checkIn.studentId, 'in_progress');
         }
     }
+  };
+  
+  // NEW: Upload File Function
+  const uploadFile = async (file) => {
+      if (!supabase) return { success: false, error: 'No connection' };
+      const fileName = `${user.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+      
+      try {
+          // Attempt to upload to 'checkins' bucket
+          const { data, error } = await supabase.storage.from('checkins').upload(fileName, file);
+          
+          if (error) {
+              // Graceful fallback for MVP if bucket doesn't exist or permissions bad
+              console.error("Upload error:", error);
+              return { success: false, error: "Upload failed. Ensure a public bucket named 'checkins' exists." };
+          }
+          
+          const { data: { publicUrl } } = supabase.storage.from('checkins').getPublicUrl(fileName);
+          return { success: true, url: publicUrl };
+          
+      } catch (e: any) {
+          return { success: false, error: e.message };
+      }
   };
 
   const updateProjectStatus = async (projectId, studentId, status) => {
@@ -348,13 +371,53 @@ export const DataProvider = ({ children }) => {
   const runDailyReminders = () => {
     setNotificationLogs(prev => prev);
   };
+  
+  // NEW: Report Generator
+  const exportRosterToCSV = () => {
+    if (!currentSemesterId) return;
+    
+    // Header
+    const headers = ['Tag', 'Student #', 'Name', 'Email', 'Status', ...projects.filter(p=>p.semester_id === currentSemesterId).map(p=>p.code)];
+    
+    // Rows
+    const rows = enrollments
+        .filter(e => e.semester_id === currentSemesterId)
+        .sort((a,b) => parseInt(a.tag_number || '0') - parseInt(b.tag_number || '0'))
+        .map(e => {
+            const profile = profiles.find(p => p.id === e.profile_id);
+            const projectStatuses = projects
+                .filter(p=>p.semester_id === currentSemesterId)
+                .map(p => {
+                   const s = projectStates.find(ps => ps.project_id === p.id && ps.student_id === e.profile_id);
+                   return s ? s.status : 'not_started';
+                });
+                
+            return [
+                e.tag_number || '00',
+                e.student_number || 'N/A',
+                `"${profile?.full_name || 'Pending'}"`,
+                e.email,
+                e.status,
+                ...projectStatuses
+            ];
+        });
+        
+    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join("\n");
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `roster_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   return (
     <DataContext.Provider value={{ 
       semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates, notificationLogs, loading,
       currentSemesterId, setCurrentSemesterId, addSemester, toggleSemesterStatus, addProject, addScheduleItem,
       addStudentToSemester, joinSemester, removeStudentFromSemester, updateProfileRole, addCheckIn, updateProjectStatus, updateInstructorNotes,
-      runDailyReminders
+      runDailyReminders, uploadFile, exportRosterToCSV
     }}>
       {children}
     </DataContext.Provider>
@@ -363,7 +426,7 @@ export const DataProvider = ({ children }) => {
 
 export const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }) => {
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
 

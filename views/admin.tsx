@@ -6,7 +6,7 @@ import { Button } from '../components';
 import { Layout, Calendar, AlertTriangle, AlertCircle, Settings, User, Users, Shield, Plus, Play, Mail, UserPlus, Trash2, Download, CheckCircle, HelpCircle, Database, Key, FileText } from 'lucide-react';
 
 export const AdminDashboard = () => {
-  const { currentSemesterId, semesters, projects, checkIns, scheduleItems } = useData();
+  const { currentSemesterId, semesters, projects, checkIns, scheduleItems, exportRosterToCSV } = useData();
   const currentSemester = semesters.find(s => s.id === currentSemesterId);
   const semesterProjects = projects.filter(p => p.semester_id === currentSemesterId);
   const stats = [
@@ -20,7 +20,7 @@ export const AdminDashboard = () => {
     <div className="space-y-8 animate-in fade-in zoom-in duration-300">
        <div className="flex justify-between items-end">
           <div><h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100">Dashboard</h2><p className="text-slate-500 dark:text-slate-400 mt-1">Overview for {currentSemester?.name || '...'} </p></div>
-          <div className="flex gap-2"><Button variant="outline"><Download size={16} /> Report</Button><Button variant="primary"><Plus size={16} /> New Announcement</Button></div>
+          <div className="flex gap-2"><Button variant="outline" onClick={exportRosterToCSV}><Download size={16} /> Report</Button><Button variant="primary"><Plus size={16} /> New Announcement</Button></div>
        </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {stats.map((stat) => (

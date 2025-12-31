@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useData, useAuth } from '../data';
 import { ROLES } from '../config';
 import { Button } from '../components';
-import { Plus, Tag, ArrowLeft, Clock, Shield, User, Camera, Send, Download, HelpCircle } from 'lucide-react';
+import { Plus, Tag, ArrowLeft, Clock, Shield, User, Camera, Send, Download, HelpCircle, X, Image as ImageIcon, Loader2 } from 'lucide-react';
 
 export const ProjectManager = ({ onSelectProject }) => {
   const { projects, currentSemesterId, semesters, projectStates, addProject } = useData();
@@ -51,11 +51,14 @@ export const ScheduleManager = () => {
 };
 
 export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
-    const { projects, checkIns, addCheckIn, projectStates, updateInstructorNotes, updateProjectStatus } = useData();
+    const { projects, checkIns, addCheckIn, projectStates, updateInstructorNotes, updateProjectStatus, uploadFile } = useData();
     const { user } = useAuth();
     const project = projects.find(p => p.id === projectId);
     const [note, setNote] = useState('');
     const [checkInText, setCheckInText] = useState('');
+    const [imageFile, setImageFile] = useState(null);
+    const [isUploading, setIsUploading] = useState(false);
+    const fileInputRef = useRef(null);
     
     // Determine whose data we are looking at
     const studentId = targetStudentId || user.id;
@@ -71,16 +74,35 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
     };
 
     // Student posts check-in
-    const handleCheckIn = (e) => {
+    const handleCheckIn = async (e) => {
         e.preventDefault();
-        if(!checkInText) return;
-        addCheckIn({ projectId, studentId, type: 'progress', content: checkInText, imageMockUrl: null });
+        if(!checkInText && !imageFile) return;
+        
+        setIsUploading(true);
+        let publicUrl = null;
+        
+        if (imageFile) {
+            const result = await uploadFile(imageFile);
+            if (result.success) {
+                publicUrl = result.url;
+            } else {
+                alert(result.error);
+                setIsUploading(false);
+                return;
+            }
+        }
+        
+        await addCheckIn({ projectId, studentId, type: 'progress', content: checkInText, imageMockUrl: publicUrl });
         setCheckInText('');
+        setImageFile(null);
+        setIsUploading(false);
     };
     
     const handleStatusChange = (newStatus) => {
         updateProjectStatus(projectId, studentId, newStatus);
     };
+
+    const triggerFileSelect = () => fileInputRef.current?.click();
 
     if (!project) return <div>Project not found</div>;
 
@@ -108,13 +130,17 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                                 <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-500">
                                     {ci.type === 'instructor_comment' ? <Shield size={18} /> : <User size={18} />}
                                 </div>
-                                <div>
+                                <div className="flex-1">
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{ci.type === 'instructor_comment' ? 'Instructor' : 'Student'}</span>
                                         <span className="text-xs text-slate-400">{new Date(ci.created_at).toLocaleString()}</span>
                                     </div>
                                     <p className="text-slate-600 dark:text-slate-400 text-sm">{ci.content}</p>
-                                    {ci.image_url && <div className="mt-2 h-20 w-32 bg-slate-200 dark:bg-slate-800 rounded-lg flex items-center justify-center text-xs text-slate-400">Image Mock</div>}
+                                    {ci.image_url && (
+                                        <div className="mt-3">
+                                            <img src={ci.image_url} alt="Check-in attachment" className="rounded-lg max-h-48 border border-slate-200 dark:border-slate-700 hover:scale-105 transition-transform cursor-pointer" />
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         ))}
@@ -130,12 +156,26 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                                     className="w-full bg-slate-50 dark:bg-slate-800 border-none rounded-lg p-3 text-sm focus:ring-2 focus:ring-emerald-500 outline-none resize-none mb-2"
                                     rows={3}
                                 />
+                                
+                                {imageFile && (
+                                    <div className="mb-2 p-2 bg-slate-100 dark:bg-slate-800 rounded-lg flex justify-between items-center">
+                                        <span className="text-xs truncate max-w-[200px] text-slate-500">{imageFile.name}</span>
+                                        <button type="button" onClick={() => setImageFile(null)} className="text-slate-400 hover:text-red-500"><X size={14} /></button>
+                                    </div>
+                                )}
+                                
                                 <div className="flex justify-between items-center">
                                     <div className="flex gap-2">
-                                        <button type="button" className="p-2 text-slate-400 hover:text-emerald-500"><Camera size={18}/></button>
+                                        <input type="file" ref={fileInputRef} onChange={e => e.target.files && setImageFile(e.target.files[0])} className="hidden" accept="image/*" />
+                                        <button type="button" onClick={triggerFileSelect} className={`p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${imageFile ? 'text-emerald-500' : 'text-slate-400'}`} title="Upload Photo">
+                                            <ImageIcon size={18}/>
+                                        </button>
+                                        <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
                                         <button type="button" onClick={() => handleStatusChange('submitted')} className="text-xs font-bold text-emerald-600 hover:text-emerald-500 px-3 py-2 bg-emerald-50 dark:bg-emerald-900/30 rounded-lg">Mark as Submitted</button>
                                     </div>
-                                    <Button type="submit" size="sm" disabled={!checkInText}><Send size={14}/> Post</Button>
+                                    <Button type="submit" size="sm" disabled={(!checkInText && !imageFile) || isUploading}>
+                                        {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Send size={14}/>} {isUploading ? 'Posting...' : 'Post'}
+                                    </Button>
                                 </div>
                             </form>
                         </div>
