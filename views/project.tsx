@@ -204,6 +204,7 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
     const [imageFile, setImageFile] = useState(null);
     const [isUploading, setIsUploading] = useState(false);
     const [viewingImage, setViewingImage] = useState(null);
+    const [deletingId, setDeletingId] = useState(null); // Track which ID is being deleted
     const fileInputRef = useRef(null);
     
     // Determine whose data we are looking at
@@ -252,9 +253,12 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
     
     const handleDeleteCheckIn = async (id) => {
         if(confirm('Are you sure you want to delete this post?')) {
+            setDeletingId(id);
             const res = await deleteCheckIn(id);
+            setDeletingId(null);
+            
             if(!res.success) {
-                 alert("Delete failed. " + (res.error?.message || JSON.stringify(res.error)));
+                 alert("Delete failed: " + (res.error?.message || "Unknown error"));
             }
         }
     };
@@ -284,7 +288,7 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                 <p className="text-slate-600 dark:text-slate-400 text-lg leading-relaxed">{project.description}</p>
                 <div className="mt-6 flex flex-wrap gap-2">
                     <span className="px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded-full text-xs font-bold text-slate-600 dark:text-slate-300 uppercase tracking-wide">Code: {project.code}</span>
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${currentState?.status === 'submitted' ? 'bg-purple-100 text-purple-800' : currentState?.status === 'reviewed' ? 'bg-lime-100 text-lime-800' : 'bg-slate-100 text-slate-500'}`}>Status: {currentState?.status?.replace('_', ' ') || 'Not Started'}</span>
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${currentState?.status === 'submitted' ? 'bg-purple-100 text-purple-800' : currentState?.status === 'reviewed' ? 'bg-lime-100 text-lime-800' : currentState?.status === 'revision_requested' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-500'}`}>Status: {currentState?.status?.replace('_', ' ') || 'Not Started'}</span>
                 </div>
             </div>
 
@@ -296,8 +300,9 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                         {studentCheckIns.length === 0 && <div className="p-8 text-center bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-400">No activity recorded yet.</div>}
                         {studentCheckIns.map(ci => {
                             const canDelete = user.role !== ROLES.STUDENT || ci.type !== 'instructor_comment';
+                            const isDeleting = deletingId === ci.id;
                             return (
-                                <div key={ci.id} className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex gap-4 group relative">
+                                <div key={ci.id} className={`bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex gap-4 group relative ${isDeleting ? 'opacity-50' : ''}`}>
                                     <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-500">
                                         {ci.type === 'instructor_comment' ? <Shield size={18} /> : <User size={18} />}
                                     </div>
@@ -323,10 +328,11 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                                         <div className="absolute top-2 right-2 z-10">
                                             <button 
                                                 onClick={(e) => { e.stopPropagation(); handleDeleteCheckIn(ci.id); }} 
+                                                disabled={isDeleting}
                                                 className="p-2 text-slate-400 hover:text-red-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" 
                                                 title="Delete Post"
                                             >
-                                                <Trash2 size={16}/>
+                                                {isDeleting ? <Loader2 size={16} className="animate-spin text-red-500"/> : <Trash2 size={16}/>}
                                             </button>
                                         </div>
                                     )}

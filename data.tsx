@@ -444,8 +444,23 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   
   const deleteCheckIn = async (id) => {
     if (!supabase) return { success: false, error: 'No connection' };
-    const { error } = await supabase.from('check_ins').delete().eq('id', id);
-    if (error) return { success: false, error };
+    
+    // Using select() allows us to verify if a row was actually returned (deleted).
+    // If Row Level Security (RLS) policies prevent deletion, Postgres might return success (no error) but delete 0 rows.
+    const { data, error } = await supabase.from('check_ins').delete().eq('id', id).select();
+
+    if (error) {
+        return { success: false, error };
+    }
+
+    // Check if any rows were actually deleted
+    if (!data || data.length === 0) {
+        return { 
+            success: false, 
+            error: { message: "Failed to delete: You may not have permission to delete this post." } 
+        };
+    }
+
     setCheckIns(prev => prev.filter(c => c.id !== id));
     return { success: true };
   };
