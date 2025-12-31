@@ -6,8 +6,9 @@ import { createClient } from '@supabase/supabase-js';
 const STORED_URL = localStorage.getItem('jdbb_supabase_url');
 const STORED_KEY = localStorage.getItem('jdbb_supabase_key');
 
-const CODE_URL = 'INSERT_YOUR_SUPABASE_URL_HERE';
-const CODE_KEY = 'INSERT_YOUR_SUPABASE_ANON_KEY_HERE';
+// HARDCODED CREDENTIALS
+const CODE_URL = 'https://yqptmvtlsjyuxtzaegun.supabase.co';
+const CODE_KEY: string = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InlxcHRtdnRsc2p5dXh0emFlZ3VuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcxNDcwODcsImV4cCI6MjA4MjcyMzA4N30.N7jNEZ46E1GvMTLBtm7N494hQqiho-szgvAWchSHvnE';
 
 // Helper to validate URL format
 const isValidUrl = (urlString) => {
