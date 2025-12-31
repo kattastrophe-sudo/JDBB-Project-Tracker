@@ -88,16 +88,15 @@ ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
 
   const schemaFixCommand = `ALTER TABLE projects ADD COLUMN IF NOT EXISTS rubric_url text;`;
 
-  // COMPREHENSIVE FIX FOR CHECK-IN DELETION
-  const permissionsFixCommand = `-- 1. Drop existing policies to remove conflicts
+  // COMPREHENSIVE FIX FOR CHECK-IN DELETION AND LABELS
+  const permissionsFixCommand = `-- 1. Ensure author_id column exists
+ALTER TABLE check_ins ADD COLUMN IF NOT EXISTS author_id uuid REFERENCES auth.users(id);
+
+-- 2. Drop existing DELETE policies to remove conflicts
 DROP POLICY IF EXISTS "Enable delete for users based on user_id" ON check_ins;
 DROP POLICY IF EXISTS "Enable delete for owners and admins" ON check_ins;
 
--- 2. Create a comprehensive DELETE policy
--- This allows:
--- A) The Author (auth.uid = author_id) to delete
--- B) The Student to delete if author_id is missing (legacy fix)
--- C) Admins (Technologist/Instructor) to delete ANY post
+-- 3. Create a comprehensive DELETE policy
 CREATE POLICY "Enable delete for owners and admins" ON check_ins FOR DELETE
 USING (
   auth.uid() = author_id 
@@ -108,7 +107,13 @@ USING (
     WHERE id = auth.uid() 
     AND role IN ('admin_technologist', 'admin_instructor')
   )
-);`;
+);
+
+-- 4. Enable INSERT policy for author_id
+DROP POLICY IF EXISTS "Enable insert for authenticated users only" ON check_ins;
+CREATE POLICY "Enable insert for authenticated users only" ON check_ins FOR INSERT
+WITH CHECK (auth.role() = 'authenticated');
+`;
 
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);

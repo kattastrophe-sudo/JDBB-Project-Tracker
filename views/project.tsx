@@ -304,12 +304,20 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                         {studentCheckIns.length === 0 && <div className="p-8 text-center bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-400">No activity recorded yet.</div>}
                         {studentCheckIns.map(ci => {
                             // DETERMINE AUTHOR LABEL
-                            const authorProfile = profiles.find(p => p.id === ci.author_id);
-                            const isAuthorAdmin = authorProfile && (authorProfile.role === ROLES.ADMIN_TECH || authorProfile.role === ROLES.ADMIN_INSTRUCTOR);
-                            // If author is found and is admin, show "Instructor". 
-                            // If author is NOT found (legacy), rely on type.
-                            // If author is found and is student, show "Student".
-                            const authorLabel = isAuthorAdmin ? 'Instructor' : (ci.type === 'instructor_comment' ? 'Instructor' : 'Student');
+                            let authorLabel = 'Student';
+                            const isMe = ci.author_id === user.id;
+
+                            if (isMe) {
+                                // If I wrote it, use my current role to label it.
+                                if (user.role === ROLES.ADMIN_TECH || user.role === ROLES.ADMIN_INSTRUCTOR) authorLabel = 'Instructor';
+                            } else if (ci.author_id) {
+                                // Look up author in profiles
+                                const author = profiles.find(p => p.id === ci.author_id);
+                                if (author && (author.role === ROLES.ADMIN_TECH || author.role === ROLES.ADMIN_INSTRUCTOR)) authorLabel = 'Instructor';
+                            } else {
+                                // Fallback for legacy data (no author_id)
+                                if (ci.type === 'instructor_comment') authorLabel = 'Instructor';
+                            }
                             
                             const canDelete = user.role !== ROLES.STUDENT || ci.type !== 'instructor_comment';
                             const isDeleting = deletingId === ci.id;
