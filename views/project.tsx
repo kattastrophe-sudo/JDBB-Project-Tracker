@@ -2,7 +2,7 @@ import React, { useState, useRef } from 'react';
 import { useData, useAuth } from '../data';
 import { ROLES } from '../config';
 import { Button } from '../components';
-import { Plus, Tag, ArrowLeft, Clock, Shield, User, Camera, Send, Download, HelpCircle, X, Image as ImageIcon, Loader2 } from 'lucide-react';
+import { Plus, Tag, ArrowLeft, Clock, Shield, User, Camera, Send, Download, HelpCircle, X, Image as ImageIcon, Loader2, Link as LinkIcon, ExternalLink } from 'lucide-react';
 
 export const ProjectManager = ({ onSelectProject }) => {
   const { projects, currentSemesterId, semesters, projectStates, addProject } = useData();
@@ -13,16 +13,28 @@ export const ProjectManager = ({ onSelectProject }) => {
   const [newCode, setNewCode] = useState('');
   const [newTitle, setNewTitle] = useState('');
   const [newDesc, setNewDesc] = useState('');
+  const [newRubric, setNewRubric] = useState('');
   const [isPublished, setIsPublished] = useState(false);
   const getStatus = (projectId) => (!user ? 'draft' : projectStates.find(s => s.project_id === projectId && s.student_id === user.id)?.status || 'not_started');
-  const handleCreate = (e) => { e.preventDefault(); addProject({ semesterId: currentSemesterId, code: newCode, title: newTitle, description: newDesc, isPublished }); setIsCreating(false); setNewCode(''); setNewTitle(''); setNewDesc(''); };
+  const handleCreate = (e) => { 
+      e.preventDefault(); 
+      addProject({ semesterId: currentSemesterId, code: newCode, title: newTitle, description: newDesc, rubricUrl: newRubric, isPublished }); 
+      setIsCreating(false); setNewCode(''); setNewTitle(''); setNewDesc(''); setNewRubric('');
+  };
   
   const isAdminTech = user.role === ROLES.ADMIN_TECH;
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center"><div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Projects</h2><p className="text-slate-500 dark:text-slate-400">{currentSemester?.name}</p></div>{isAdminTech && <Button variant="primary" onClick={() => setIsCreating(!isCreating)}>{isCreating ? 'Cancel' : <><Plus size={18} /> New Project</>}</Button>}</div>
-      {isCreating && isAdminTech && <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50 mb-6"><form onSubmit={handleCreate} className="space-y-4"><div className="grid grid-cols-1 md:grid-cols-4 gap-4"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Code</label><input type="text" value={newCode} onChange={e => setNewCode(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required /></div><div className="md:col-span-3"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Title</label><input type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required /></div></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Description</label><textarea rows={3} value={newDesc} onChange={e => setNewDesc(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" /></div><div className="flex items-center gap-4"><label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300"><input type="checkbox" checked={isPublished} onChange={e => setIsPublished(e.target.checked)} /> Publish immediately</label></div><div className="flex justify-end"><Button type="submit" variant="primary">Create</Button></div></form></div>}
+      {isCreating && isAdminTech && <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50 mb-6"><form onSubmit={handleCreate} className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Code</label><input type="text" value={newCode} onChange={e => setNewCode(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required placeholder="P1"/></div>
+              <div className="md:col-span-3"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Title</label><input type="text" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required placeholder="Casting Project"/></div>
+          </div>
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Description</label><textarea rows={3} value={newDesc} onChange={e => setNewDesc(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" placeholder="Project details..."/></div>
+          <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Rubric / Brief URL</label><input type="url" value={newRubric} onChange={e => setNewRubric(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" placeholder="https://docs.google.com/..."/></div>
+          <div className="flex items-center gap-4"><label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300"><input type="checkbox" checked={isPublished} onChange={e => setIsPublished(e.target.checked)} /> Publish immediately</label></div><div className="flex justify-end"><Button type="submit" variant="primary">Create</Button></div></form></div>}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">{semesterProjects.map(project => { const status = getStatus(project.id); return (<div key={project.id} onClick={() => onSelectProject && onSelectProject(project.id)} className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col justify-between hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700 transition-all cursor-pointer group"><div className="space-y-4"><div className="flex justify-between items-start"><span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-600 dark:text-slate-300">{project.code}</span>{user.role !== ROLES.STUDENT ? (project.is_published ? <span className="text-xs font-bold text-emerald-500">Published</span> : <span className="text-xs font-bold text-slate-400">Draft</span>) : (<span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${status === 'reviewed' ? 'bg-lime-100 text-lime-800' : 'bg-slate-100 text-slate-500'}`}>{status.replace('_', ' ')}</span>)}</div><h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{project.title}</h3></div></div>); })}</div>
     </div>
   );
@@ -167,7 +179,7 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                                 <div className="flex justify-between items-center">
                                     <div className="flex gap-2">
                                         <input type="file" ref={fileInputRef} onChange={e => e.target.files && setImageFile(e.target.files[0])} className="hidden" accept="image/*" />
-                                        <button type="button" onClick={triggerFileSelect} className={`p-2 rounded hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors ${imageFile ? 'text-emerald-500' : 'text-slate-400'}`} title="Upload Photo">
+                                        <button type="button" onClick={triggerFileSelect} className={`p-2 rounded hover:bg-slate-100 dark:bg-slate-800 transition-colors ${imageFile ? 'text-emerald-500' : 'text-slate-400'}`} title="Upload Photo">
                                             <ImageIcon size={18}/>
                                         </button>
                                         <div className="h-8 w-px bg-slate-200 dark:bg-slate-700 mx-1"></div>
@@ -200,15 +212,31 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                     )}
                 </div>
 
-                {/* PROJECT RESOURCES / STATUS (Simplified) */}
+                {/* PROJECT RESOURCES / STATUS */}
                 <div>
                      <div className="bg-slate-50 dark:bg-slate-800/50 p-6 rounded-3xl">
                         <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-4">Resources</h3>
-                        <ul className="space-y-2 text-sm text-emerald-600 dark:text-emerald-400">
-                            <li className="flex items-center gap-2 cursor-pointer hover:underline"><Download size={14}/> Project Brief.pdf</li>
-                            <li className="flex items-center gap-2 cursor-pointer hover:underline"><Download size={14}/> Starter_Code.zip</li>
-                            <li className="flex items-center gap-2 cursor-pointer hover:underline"><HelpCircle size={14}/> Grading Rubric</li>
-                        </ul>
+                        {project.rubric_url ? (
+                            <a href={project.rubric_url} target="_blank" rel="noreferrer" className="flex items-center gap-3 p-4 bg-white dark:bg-slate-800 border border-emerald-100 dark:border-emerald-900/30 rounded-xl group hover:border-emerald-400 transition-colors">
+                                <div className="w-10 h-10 rounded-lg bg-emerald-100 dark:bg-emerald-900/40 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                                    <ExternalLink size={20} />
+                                </div>
+                                <div>
+                                    <div className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">Project Rubric & Brief</div>
+                                    <div className="text-xs text-slate-500">External Link</div>
+                                </div>
+                            </a>
+                        ) : (
+                            <div className="text-sm text-slate-500 italic flex items-center gap-2"><HelpCircle size={14}/> No external resources linked.</div>
+                        )}
+                        
+                        <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-700">
+                             <h4 className="font-bold text-sm text-slate-500 uppercase mb-3">Deliverables</h4>
+                             <div className="text-sm text-slate-600 dark:text-slate-400 space-y-2">
+                                 <p className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-slate-400"></div> Submit photos of process</p>
+                                 <p className="flex items-center gap-2"><div className="w-1.5 h-1.5 rounded-full bg-slate-400"></div> Final studio shot</p>
+                             </div>
+                        </div>
                      </div>
                 </div>
             </div>

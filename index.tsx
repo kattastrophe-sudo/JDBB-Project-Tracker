@@ -28,12 +28,12 @@ const AppShell = () => {
   const renderView = () => {
     if (user.role === ROLES.STUDENT) {
       if (['semesters', 'matrix', 'roster', 'settings'].includes(currentView)) {
-        return <StudentDashboard />;
+        return <StudentDashboard onSelectProject={handleSelectProject} setView={setCurrentView} />;
       }
     }
 
     switch(currentView) {
-      case 'dashboard': return user.role === ROLES.STUDENT ? <StudentDashboard /> : <AdminDashboard />;
+      case 'dashboard': return user.role === ROLES.STUDENT ? <StudentDashboard onSelectProject={handleSelectProject} setView={setCurrentView} /> : <AdminDashboard />;
       case 'semesters': return <SemesterManager />;
       case 'projects': return <ProjectManager onSelectProject={handleSelectProject} />;
       case 'project_detail': return <ProjectDetail projectId={selectedProjectId} targetStudentId={selectedStudentId} onBack={() => selectedStudentId ? setCurrentView('student_profile') : setCurrentView('projects')} />;
@@ -42,7 +42,7 @@ const AppShell = () => {
       case 'matrix': return <ProgressMatrix onSelectStudent={handleSelectStudent} />;
       case 'roster': return <RosterManager onSelectStudent={handleSelectStudent} />;
       case 'settings': return <AdminSettings />;
-      default: return user.role === ROLES.STUDENT ? <StudentDashboard /> : <AdminDashboard />;
+      default: return user.role === ROLES.STUDENT ? <StudentDashboard onSelectProject={handleSelectProject} setView={setCurrentView} /> : <AdminDashboard />;
     }
   };
 

@@ -8,7 +8,7 @@ export const ThemeContext = createContext({
   toggleTheme: () => {}
 });
 
-export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
+export const ThemeProvider = ({ children }: { children?: React.ReactNode }) => {
   const [isDark, setIsDark] = useState(true);
   useEffect(() => {
     if (isDark) {
@@ -23,7 +23,7 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
 
 export const DataContext = createContext(null);
 
-export const DataProvider = ({ children }: { children: React.ReactNode }) => {
+export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [semesters, setSemesters] = useState([]);
@@ -153,7 +153,8 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       code: project.code,
       title: project.title,
       description: project.description,
-      is_published: project.isPublished
+      is_published: project.isPublished,
+      rubric_url: project.rubricUrl // Added field
     };
     const { data, error } = await supabase.from('projects').insert([dbProject]).select();
     if (error) {
@@ -299,7 +300,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
       student_id: checkIn.studentId,
       type: checkIn.type,
       content: checkIn.content,
-      image_url: checkIn.imageMockUrl // Now receives actual URL if uploaded
+      image_url: checkIn.imageMockUrl
     };
     const { data } = await supabase.from('check_ins').insert([dbCheckIn]).select();
     if (data) {
@@ -310,19 +311,28 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
     }
   };
   
-  // NEW: Upload File Function
+  // Upload File Function
   const uploadFile = async (file) => {
       if (!supabase) return { success: false, error: 'No connection' };
+      
+      // 1. Client-side Size Validation (5MB)
+      const LIMIT_MB = 5;
+      if (file.size > LIMIT_MB * 1024 * 1024) {
+          return { success: false, error: `File is too large. Max size is ${LIMIT_MB}MB.` };
+      }
+
       const fileName = `${user.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
       
       try {
-          // Attempt to upload to 'checkins' bucket
           const { data, error } = await supabase.storage.from('checkins').upload(fileName, file);
           
           if (error) {
-              // Graceful fallback for MVP if bucket doesn't exist or permissions bad
               console.error("Upload error:", error);
-              return { success: false, error: "Upload failed. Ensure a public bucket named 'checkins' exists." };
+              const msg = error.message || "";
+              if (msg.includes('exceeded the maximum allowed size') || msg.includes('EntityTooLarge')) {
+                   return { success: false, error: "Upload rejected by server: File is too large." };
+              }
+              return { success: false, error: "Upload failed: " + msg };
           }
           
           const { data: { publicUrl } } = supabase.storage.from('checkins').getPublicUrl(fileName);
@@ -426,7 +436,7 @@ export const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
 export const AuthContext = createContext(null);
 
-export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+export const AuthProvider = ({ children }: { children?: React.ReactNode }) => {
   const [user, setUser] = useState(null);
   const [session, setSession] = useState(null);
 

@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import { useData, useAuth } from '../data';
 import { COLORS } from '../config';
 import { Button } from '../components';
-import { Layout, Clock, Calendar, AlertTriangle, AlertCircle, Settings, Camera, Shield, ArrowLeft } from 'lucide-react';
+import { Layout, Clock, Calendar, AlertTriangle, AlertCircle, Settings, Camera, Shield, ArrowLeft, CheckCircle } from 'lucide-react';
 
-export const StudentDashboard = () => {
+export const StudentDashboard = ({ onSelectProject, setView }) => {
   const { currentSemesterId, semesters, scheduleItems, projects, projectStates, joinSemester } = useData();
   const { user } = useAuth();
   const currentSemester = semesters.find(s => s.id === currentSemesterId);
@@ -46,7 +46,20 @@ export const StudentDashboard = () => {
       );
   }
 
-  const upcomingItems = scheduleItems.filter(s => s.semester_id === currentSemesterId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 4);
+  const upcomingItems = scheduleItems.filter(s => s.semester_id === currentSemesterId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  
+  // Calculate next deadline
+  const nextDeadline = upcomingItems.find(i => (i.type === 'due' || i.type === 'critique') && new Date(i.date) >= new Date(new Date().setHours(0,0,0,0)));
+  
+  const getDaysRemaining = (dateStr) => {
+      const diff = new Date(dateStr).getTime() - new Date().getTime();
+      const days = Math.ceil(diff / (1000 * 3600 * 24));
+      if (days < 0) return 'Overdue';
+      if (days === 0) return 'Today';
+      if (days === 1) return 'Tomorrow';
+      return `${days} Days`;
+  };
+  
   const activeProject = projects.find(p => p.is_published) || projects[0];
   const activeProjectState = activeProject ? projectStates.find(ps => ps.project_id === activeProject.id && ps.student_id === user.id) : null;
   const status = activeProjectState?.status || 'not_started';
@@ -68,32 +81,61 @@ export const StudentDashboard = () => {
                     <div className="flex justify-between items-center mb-2 text-sm font-bold"><span>Status: {status.replace('_', ' ')}</span><span>{status === 'submitted' ? '100%' : status === 'in_progress' ? '50%' : '0%'}</span></div>
                     <div className="h-2 bg-black/20 rounded-full overflow-hidden"><div className="h-full bg-white rounded-full transition-all duration-1000" style={{ width: status === 'submitted' ? '100%' : status === 'in_progress' ? '50%' : '5%' }}></div></div>
                  </div>
-                 <div className="mt-6 flex gap-3"><Button className="bg-white text-emerald-900 hover:bg-emerald-50 border-none shadow-lg">Continue Work <ArrowLeft className="rotate-180" size={16} /></Button><Button variant="outline" className="text-white border-white/30 hover:bg-white/10">View Rubric</Button></div></>
+                 <div className="mt-6 flex gap-3">
+                    <Button onClick={() => onSelectProject(activeProject.id)} className="bg-white text-emerald-900 hover:bg-emerald-50 border-none shadow-lg">Continue Work <ArrowLeft className="rotate-180" size={16} /></Button>
+                    <Button variant="outline" className="text-white border-white/30 hover:bg-white/10">View Rubric</Button>
+                 </div></>
              ) : (<p>No active projects.</p>)}
            </div>
         </div>
-        <div className="bg-slate-900 dark:bg-slate-800 text-white rounded-3xl p-6 shadow-xl flex flex-col justify-between relative overflow-hidden" style={{ backgroundColor: COLORS.vintageGrape }}>
-           <div className="absolute -bottom-4 -right-4 text-white/5"><AlertCircle size={100} /></div>
-           <div><h4 className="text-white/70 font-bold uppercase text-xs tracking-wider mb-4 flex items-center gap-2"><AlertTriangle size={14} /> Critical Deadline</h4><div className="text-4xl font-bold mb-1">2 Days</div><div className="text-white/80 font-medium">Until P1 Submission</div></div>
-           <div className="mt-8 pt-6 border-t border-white/10"><div className="flex items-center gap-3 mb-2"><div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"><Calendar size={20} /></div><div><div className="text-sm font-bold">Feb 01, 2026</div><div className="text-xs text-white/60">Midnight EST</div></div></div></div>
-        </div>
+        
+        {/* Dynamic Deadline Card */}
+        {nextDeadline ? (
+             <div className="bg-slate-900 dark:bg-slate-800 text-white rounded-3xl p-6 shadow-xl flex flex-col justify-between relative overflow-hidden" style={{ backgroundColor: COLORS.vintageGrape }}>
+               <div className="absolute -bottom-4 -right-4 text-white/5"><AlertCircle size={100} /></div>
+               <div>
+                   <h4 className="text-white/70 font-bold uppercase text-xs tracking-wider mb-4 flex items-center gap-2">
+                       <AlertTriangle size={14} /> Critical Deadline
+                   </h4>
+                   <div className="text-4xl font-bold mb-1">{getDaysRemaining(nextDeadline.date)}</div>
+                   <div className="text-white/80 font-medium">Until {nextDeadline.title}</div>
+               </div>
+               <div className="mt-8 pt-6 border-t border-white/10">
+                   <div className="flex items-center gap-3 mb-2">
+                       <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center"><Calendar size={20} /></div>
+                       <div>
+                           <div className="text-sm font-bold">{new Date(nextDeadline.date).toLocaleDateString()}</div>
+                           <div className="text-xs text-white/60">Midnight EST</div>
+                       </div>
+                   </div>
+               </div>
+            </div>
+        ) : (
+            <div className="bg-emerald-600 dark:bg-emerald-900 text-white rounded-3xl p-6 shadow-xl flex flex-col justify-center items-center relative overflow-hidden">
+                <div className="bg-white/20 p-4 rounded-full mb-4"><CheckCircle size={40} /></div>
+                <h3 className="text-xl font-bold text-center">All caught up!</h3>
+                <p className="text-emerald-100 text-center text-sm mt-2">No pending deadlines in the calendar.</p>
+            </div>
+        )}
+
         <div className="lg:col-span-2 bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
-           <div className="flex items-center justify-between mb-6"><h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Calendar size={20} className="text-slate-400" /> Upcoming Schedule</h3><button className="text-xs font-bold text-emerald-500 hover:text-emerald-600">View All</button></div>
+           <div className="flex items-center justify-between mb-6"><h3 className="font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2"><Calendar size={20} className="text-slate-400" /> Upcoming Schedule</h3><button onClick={() => setView('schedule')} className="text-xs font-bold text-emerald-500 hover:text-emerald-600">View All</button></div>
            <div className="space-y-4">
-              {upcomingItems.map(item => (
+              {upcomingItems.slice(0, 4).map(item => (
                 <div key={item.id} className="flex items-center group p-2 hover:bg-slate-50 dark:hover:bg-slate-800/50 rounded-xl transition-colors">
                    <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex flex-col items-center justify-center text-slate-500 group-hover:bg-emerald-100 dark:group-hover:bg-emerald-900/30 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors"><span className="text-xs font-bold uppercase">{new Date(item.date).toLocaleDateString('en-US', { month: 'short' })}</span><span className="text-lg font-bold">{new Date(item.date).getDate()}</span></div>
                    <div className="ml-4 flex-1"><div className="font-bold text-slate-800 dark:text-slate-200">{item.title}</div><div className="text-xs text-slate-500 dark:text-slate-400 uppercase tracking-wide font-medium">{item.type.replace('_', ' ')}</div></div>
                    <div className="px-4">{item.type === 'due' && <span className="text-xs font-bold text-white px-2 py-1 rounded bg-red-500">DUE</span>}</div>
                 </div>
               ))}
+              {upcomingItems.length === 0 && <div className="text-slate-400 text-sm italic">No upcoming events scheduled.</div>}
            </div>
         </div>
         <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 shadow-sm border border-slate-100 dark:border-slate-800">
            <h3 className="font-bold text-slate-800 dark:text-slate-100 mb-6 flex items-center gap-2"><Settings size={20} className="text-slate-400" /> Quick Actions</h3>
            <div className="grid grid-cols-1 gap-3">
-              <button className="flex items-center gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 hover:border-emerald-200 border border-transparent transition-all group text-left"><div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center"><Camera size={20} /></div><div><div className="font-bold text-slate-800 dark:text-slate-200 text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400">Post Check-in</div><div className="text-xs text-slate-500">Upload a photo</div></div></button>
-              <button className="flex items-center gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/10 hover:border-blue-200 border border-transparent transition-all group text-left"><div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center"><Layout size={20} /></div><div><div className="font-bold text-slate-800 dark:text-slate-200 text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400">View Timeline</div><div className="text-xs text-slate-500">P1 Full Schedule</div></div></button>
+              <button onClick={() => activeProject && onSelectProject(activeProject.id)} className="flex items-center gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 hover:border-emerald-200 border border-transparent transition-all group text-left"><div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center"><Camera size={20} /></div><div><div className="font-bold text-slate-800 dark:text-slate-200 text-sm group-hover:text-emerald-600 dark:group-hover:text-emerald-400">Post Check-in</div><div className="text-xs text-slate-500">Upload a photo</div></div></button>
+              <button onClick={() => setView('schedule')} className="flex items-center gap-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-blue-50 dark:hover:bg-blue-900/10 hover:border-blue-200 border border-transparent transition-all group text-left"><div className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 flex items-center justify-center"><Layout size={20} /></div><div><div className="font-bold text-slate-800 dark:text-slate-200 text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400">View Timeline</div><div className="text-xs text-slate-500">Full Schedule</div></div></button>
            </div>
         </div>
       </div>
