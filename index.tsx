@@ -1,6 +1,6 @@
 import React, { useState, createContext, useContext, useEffect, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, MoreHorizontal, Clock, Tag, UserPlus, Trash2, Search, Sun, Moon, ArrowLeft, Camera, FileText, Send, Paperclip, BarChart3, Filter, X, Lock, Eye, Settings, Mail, Archive, Power } from 'lucide-react';
+import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, MoreHorizontal, Clock, Tag, UserPlus, Trash2, Search, Sun, Moon, ArrowLeft, Camera, FileText, Send, Paperclip, BarChart3, Filter, X, Lock, Eye, Settings, Mail, Archive, Power, Download, Bell, Play } from 'lucide-react';
 
 // --- JDBB Design System & Constants ---
 
@@ -104,7 +104,7 @@ const ThemeContext = createContext({
 
 const useTheme = () => useContext(ThemeContext);
 
-const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
+const ThemeProvider = ({ children }: { children?: React.ReactNode }) => {
   const [isDark, setIsDark] = useState(true);
 
   useEffect(() => {
@@ -139,12 +139,14 @@ interface DataContextType {
   setCurrentSemesterId: (id: string) => void;
   addSemester: (sem: Omit<Semester, 'id'>) => void;
   toggleSemesterStatus: (id: string) => void;
+  addProject: (project: Omit<Project, 'id'>) => void;
   addScheduleItem: (item: Omit<ScheduleItem, 'id'>) => void;
   addStudentToSemester: (student: { name: string; email: string; studentNumber: string; tagNumber: string }, semesterId: string) => void;
   removeStudentFromSemester: (enrollmentId: string) => void;
   addCheckIn: (checkIn: Omit<CheckIn, 'id'>) => void;
   updateProjectStatus: (projectId: string, studentId: string, status: StudentProjectState['status']) => void;
   updateInstructorNotes: (projectId: string, studentId: string, notes: string) => void;
+  runDailyReminders: () => void;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -200,7 +202,7 @@ const initialNotificationLogs: NotificationLog[] = [
   { id: 'n-3', date: '2026-01-28T08:00:00', recipient: 'jordan@student.jdbb.edu', type: 'Alert', subject: 'Missed Progress Check', status: 'Failed' },
 ];
 
-const DataProvider = ({ children }: { children: React.ReactNode }) => {
+const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   const [semesters, setSemesters] = useState<Semester[]>(initialSemesters);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>(initialSchedule);
@@ -218,6 +220,11 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
 
   const toggleSemesterStatus = (id: string) => {
     setSemesters(prev => prev.map(s => s.id === id ? { ...s, isActive: !s.isActive } : s));
+  };
+
+  const addProject = (project: Omit<Project, 'id'>) => {
+    const newProject = { ...project, id: `p-${Date.now()}` };
+    setProjects([...projects, newProject]);
   };
 
   const addScheduleItem = (item: Omit<ScheduleItem, 'id'>) => {
@@ -296,11 +303,44 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
     });
   };
 
+  const runDailyReminders = () => {
+    // 1. Find Schedule Items due soon (simulated "next 7 days")
+    const now = new Date();
+    const upcoming = scheduleItems.filter(item => {
+      const d = new Date(item.date);
+      const diff = d.getTime() - now.getTime();
+      const days = diff / (1000 * 3600 * 24);
+      return days >= 0 && days <= 7 && item.semesterId === currentSemesterId;
+    });
+
+    const newLogs: NotificationLog[] = [];
+    const activeEnrollments = enrollments.filter(e => e.semesterId === currentSemesterId);
+
+    activeEnrollments.forEach(enrollment => {
+       const profile = profiles.find(p => p.id === enrollment.profileId);
+       if (!profile) return;
+
+       upcoming.forEach(item => {
+          newLogs.push({
+            id: `n-${Date.now()}-${Math.random()}`,
+            date: new Date().toISOString(),
+            recipient: profile.email,
+            type: 'Reminder',
+            subject: `Upcoming: ${item.title} (${new Date(item.date).toLocaleDateString()})`,
+            status: Math.random() > 0.1 ? 'Sent' : 'Failed' // 10% simulated failure rate
+          });
+       });
+    });
+
+    setNotificationLogs(prev => [...newLogs, ...prev]);
+  };
+
   return (
     <DataContext.Provider value={{ 
       semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates, notificationLogs,
-      currentSemesterId, setCurrentSemesterId, addSemester, toggleSemesterStatus, addScheduleItem,
-      addStudentToSemester, removeStudentFromSemester, addCheckIn, updateProjectStatus, updateInstructorNotes
+      currentSemesterId, setCurrentSemesterId, addSemester, toggleSemesterStatus, addProject, addScheduleItem,
+      addStudentToSemester, removeStudentFromSemester, addCheckIn, updateProjectStatus, updateInstructorNotes,
+      runDailyReminders
     }}>
       {children}
     </DataContext.Provider>
@@ -317,7 +357,7 @@ const useData = () => {
 
 const AuthContext = createContext(null);
 
-const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+const AuthProvider = ({ children }: { children?: React.ReactNode }) => {
   const [user, setUser] = useState(null);
 
   // Mock User ID mapping for simplicity in this prototype
@@ -344,15 +384,16 @@ const useAuth = () => useContext(AuthContext);
 // --- UI Components ---
 
 interface ButtonProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   onClick?: () => void;
   variant?: 'primary' | 'secondary' | 'outline' | 'danger' | 'ghost';
   className?: string;
   fullWidth?: boolean;
   disabled?: boolean;
+  type?: 'button' | 'submit' | 'reset';
 }
 
-const Button = ({ children, onClick, variant = 'primary', className = '', fullWidth = false, disabled = false }: ButtonProps) => {
+const Button = ({ children, onClick, variant = 'primary', className = '', fullWidth = false, disabled = false, type = 'button' }: ButtonProps) => {
   const baseStyle = "px-4 py-2 rounded-md font-medium transition-colors duration-200 flex items-center justify-center gap-2 shadow-sm text-sm";
   const widthClass = fullWidth ? "w-full" : "";
   const disabledClass = disabled ? "opacity-50 cursor-not-allowed" : "hover:opacity-90 active:scale-95";
@@ -377,6 +418,7 @@ const Button = ({ children, onClick, variant = 'primary', className = '', fullWi
 
   return (
     <button 
+      type={type}
       onClick={onClick} 
       disabled={disabled}
       className={`${baseStyle} ${widthClass} ${disabledClass} ${className} ${variantClass}`}
@@ -642,7 +684,7 @@ const ProjectDetail = ({ projectId, onBack, targetStudentId }: { projectId: stri
                     {hasFile ? 'Photo Attached' : 'Add Photo'}
                   </button>
                   
-                  <Button variant={isInstructorReview ? "secondary" : "primary"} disabled={(!note && !hasFile) || isSubmitting}>
+                  <Button type="submit" variant={isInstructorReview ? "secondary" : "primary"} disabled={(!note && !hasFile) || isSubmitting}>
                      {isSubmitting ? 'Posting...' : <><Send size={14} /> {isInstructorReview ? 'Post Comment' : 'Post Check-in'}</>}
                   </Button>
                </div>
@@ -836,6 +878,33 @@ const ProgressMatrix = ({ onSelectStudent }: { onSelectStudent: (studentId: stri
      }
   };
 
+  const handleExportCSV = () => {
+    if (!currentSemester) return;
+    
+    // Header Row: Student Info + Projects
+    const headers = ['Tag Number', 'Student Name', 'Student ID', ...semesterProjects.map(p => p.code)];
+    
+    // Data Rows
+    const rows = semesterEnrollments.map(enrollment => {
+      const profile = profiles.find(p => p.id === enrollment.profileId);
+      const projectStatuses = semesterProjects.map(p => {
+        const state = projectStates.find(s => s.projectId === p.id && s.studentId === enrollment.profileId);
+        return state?.status || 'not_started';
+      });
+      return [enrollment.tagNumber, profile?.fullName || 'Unknown', enrollment.studentNumber, ...projectStatuses];
+    });
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `progress_${currentSemester.courseCode}_${currentSemester.name.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -845,7 +914,9 @@ const ProgressMatrix = ({ onSelectStudent }: { onSelectStudent: (studentId: stri
         </div>
         <div className="flex gap-2">
            <Button variant="outline"><Filter size={16}/> Filter</Button>
-           <Button variant="outline"><BarChart3 size={16}/> Export CSV</Button>
+           <Button variant="outline" onClick={handleExportCSV}>
+             <Download size={16}/> Export CSV
+           </Button>
         </div>
       </div>
 
@@ -984,7 +1055,7 @@ const SemesterManager = () => {
                 <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Start Date</label>
                 <input type="date" value={newStartDate} onChange={e => setNewStartDate(e.target.value)} className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500" required />
              </div>
-             <Button variant="primary" fullWidth>Create Semester</Button>
+             <Button type="submit" variant="primary" fullWidth>Create Semester</Button>
            </form>
         </div>
       )}
@@ -1052,7 +1123,17 @@ const SemesterManager = () => {
 // --- View: Admin Settings (Notification Log) ---
 
 const AdminSettings = () => {
-  const { notificationLogs } = useData();
+  const { notificationLogs, runDailyReminders } = useData();
+  const [isRunning, setIsRunning] = useState(false);
+
+  const handleRunReminders = () => {
+    setIsRunning(true);
+    // Simulate API delay
+    setTimeout(() => {
+      runDailyReminders();
+      setIsRunning(false);
+    }, 1000);
+  };
 
   return (
     <div className="space-y-6">
@@ -1063,6 +1144,29 @@ const AdminSettings = () => {
 
       <div className="grid grid-cols-1 gap-6">
         
+        {/* System Info Card */}
+        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+           <div className="flex justify-between items-start mb-4">
+             <h3 className="font-bold text-slate-800 dark:text-slate-200 flex items-center gap-2">
+               <Settings size={18} /> Configuration
+             </h3>
+             <Button onClick={handleRunReminders} disabled={isRunning} variant="primary">
+                {isRunning ? 'Sending...' : <><Play size={16} /> Run Daily Reminders</>}
+             </Button>
+           </div>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-4 rounded border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                 <div className="text-xs font-bold text-slate-500 uppercase mb-1">Timezone</div>
+                 <div className="font-mono text-sm text-slate-800 dark:text-slate-200">America/Toronto</div>
+              </div>
+              <div className="p-4 rounded border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
+                 <div className="text-xs font-bold text-slate-500 uppercase mb-1">Reminder Frequency</div>
+                 <div className="font-mono text-sm text-slate-800 dark:text-slate-200">Daily @ 08:00 EST</div>
+              </div>
+           </div>
+        </div>
+
         {/* Notification Log Card */}
         <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-center bg-slate-50 dark:bg-slate-900">
@@ -1105,23 +1209,6 @@ const AdminSettings = () => {
                ))}
              </tbody>
            </table>
-        </div>
-        
-        {/* System Info Card */}
-        <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6">
-           <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
-             <Settings size={18} /> Configuration
-           </h3>
-           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="p-4 rounded border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-                 <div className="text-xs font-bold text-slate-500 uppercase mb-1">Timezone</div>
-                 <div className="font-mono text-sm text-slate-800 dark:text-slate-200">America/Toronto</div>
-              </div>
-              <div className="p-4 rounded border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50">
-                 <div className="text-xs font-bold text-slate-500 uppercase mb-1">Reminder Frequency</div>
-                 <div className="font-mono text-sm text-slate-800 dark:text-slate-200">Daily @ 08:00 EST</div>
-              </div>
-           </div>
         </div>
 
       </div>
@@ -1185,6 +1272,28 @@ const RosterManager = ({ onSelectStudent }: { onSelectStudent?: (id: string) => 
     setNewTag('');
   };
 
+  const handleExportCSV = () => {
+    if (!currentSemester) return;
+    
+    // Header Row
+    const headers = ['Tag Number', 'Student Name', 'Student ID', 'Email', 'Role'];
+    
+    // Data Rows
+    const rows = rosterData.map(record => {
+      return [record.tagNumber, record.profile?.fullName, record.studentNumber, record.profile?.email, record.profile?.role];
+    });
+
+    const csvContent = [headers, ...rows].map(e => e.join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `roster_${currentSemester.courseCode}_${currentSemester.name.replace(/\s+/g, '_')}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
@@ -1193,8 +1302,8 @@ const RosterManager = ({ onSelectStudent }: { onSelectStudent?: (id: string) => 
           <p className="text-slate-500 dark:text-slate-400">Manage enrollment for {currentSemester?.name}</p>
         </div>
         <div className="flex gap-2">
-            <Button variant="outline">
-                Import CSV
+            <Button variant="outline" onClick={handleExportCSV}>
+                <Download size={16}/> Export CSV
             </Button>
             <Button variant="primary" onClick={() => setIsAdding(!isAdding)}>
             {isAdding ? 'Cancel' : <><UserPlus size={18} /> Add Student</>}
@@ -1262,7 +1371,7 @@ const RosterManager = ({ onSelectStudent }: { onSelectStudent?: (id: string) => 
                />
             </div>
             <div className="lg:col-span-1">
-              <Button variant="primary" fullWidth className="h-[38px]">
+              <Button type="submit" variant="primary" fullWidth className="h-[38px]">
                 Confirm
               </Button>
             </div>
@@ -1342,16 +1451,42 @@ const RosterManager = ({ onSelectStudent }: { onSelectStudent?: (id: string) => 
 // --- View: Projects (Admin/Student List) ---
 
 const ProjectManager = ({ onSelectProject }: { onSelectProject?: (id: string) => void }) => {
-  const { projects, currentSemesterId, semesters, projectStates } = useData();
+  const { projects, currentSemesterId, semesters, projectStates, addProject } = useData();
   const { user } = useAuth();
   
   const currentSemester = semesters.find(s => s.id === currentSemesterId);
   const semesterProjects = projects.filter(p => p.semesterId === currentSemesterId);
 
+  // Form State
+  const [isCreating, setIsCreating] = useState(false);
+  const [newCode, setNewCode] = useState('');
+  const [newTitle, setNewTitle] = useState('');
+  const [newDesc, setNewDesc] = useState('');
+  const [isPublished, setIsPublished] = useState(false);
+
   const getStatus = (projectId: string) => {
     if (!user) return 'draft';
     const state = projectStates.find(s => s.projectId === projectId && s.studentId === user.id);
     return state?.status || 'not_started';
+  };
+
+  const handleCreate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCode || !newTitle) return;
+
+    addProject({
+      semesterId: currentSemesterId,
+      code: newCode,
+      title: newTitle,
+      description: newDesc,
+      isPublished: isPublished
+    });
+
+    setIsCreating(false);
+    setNewCode('');
+    setNewTitle('');
+    setNewDesc('');
+    setIsPublished(false);
   };
 
   return (
@@ -1362,11 +1497,45 @@ const ProjectManager = ({ onSelectProject }: { onSelectProject?: (id: string) =>
           <p className="text-slate-500 dark:text-slate-400">{currentSemester?.name}</p>
         </div>
         {user.role !== ROLES.STUDENT && (
-          <Button variant="primary">
-            <Plus size={18} /> New Project
+          <Button variant="primary" onClick={() => setIsCreating(!isCreating)}>
+            {isCreating ? 'Cancel' : <><Plus size={18} /> New Project</>}
           </Button>
         )}
       </div>
+
+      {/* Project Creation Form */}
+      {isCreating && user.role !== ROLES.STUDENT && (
+        <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50 mb-6 animate-in slide-in-from-top-4 duration-300">
+           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100 mb-4 flex items-center gap-2">
+             <Tag size={16} className="text-emerald-500" /> Create New Project
+           </h3>
+           <form onSubmit={handleCreate} className="space-y-4">
+             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Code</label>
+                   <input type="text" placeholder="e.g. P4" value={newCode} onChange={e => setNewCode(e.target.value)} className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500" required />
+                </div>
+                <div className="md:col-span-3">
+                   <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Project Title</label>
+                   <input type="text" placeholder="e.g. Advanced Fabrication" value={newTitle} onChange={e => setNewTitle(e.target.value)} className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500" required />
+                </div>
+             </div>
+             <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase mb-1">Description / Brief</label>
+                <textarea rows={3} placeholder="Describe the requirements..." value={newDesc} onChange={e => setNewDesc(e.target.value)} className="w-full border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 rounded px-3 py-2 text-sm text-slate-800 dark:text-slate-100 focus:outline-none focus:border-emerald-500" />
+             </div>
+             <div className="flex items-center gap-4">
+                <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <input type="checkbox" checked={isPublished} onChange={e => setIsPublished(e.target.checked)} className="rounded border-slate-300 text-emerald-500 focus:ring-emerald-500" />
+                  Publish immediately (visible to students)
+                </label>
+             </div>
+             <div className="flex justify-end pt-2">
+                <Button type="submit" variant="primary" className="w-full md:w-auto">Create Project</Button>
+             </div>
+           </form>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {semesterProjects.map(project => {
@@ -1421,7 +1590,10 @@ const ProjectManager = ({ onSelectProject }: { onSelectProject?: (id: string) =>
         
         {/* Empty State / Add New Card (Admin Only) */}
         {user.role !== ROLES.STUDENT && (
-          <button className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg p-6 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 hover:border-emerald-300 hover:text-emerald-500 transition-colors group h-full min-h-[200px]">
+          <button 
+            onClick={() => setIsCreating(true)}
+            className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg p-6 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 hover:border-emerald-300 hover:text-emerald-500 transition-colors group h-full min-h-[200px]"
+          >
             <Plus size={32} className="mb-2 group-hover:scale-110 transition-transform" />
             <span className="font-medium">Add Project</span>
           </button>
@@ -1544,7 +1716,7 @@ const ScheduleManager = () => {
               className="border border-slate-300 dark:border-slate-700 rounded px-3 py-2 text-sm text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 flex-1 focus:outline-none focus:border-emerald-500 placeholder:text-slate-400"
               required
             />
-            <Button variant="primary" className="whitespace-nowrap">
+            <Button type="submit" variant="primary" className="whitespace-nowrap">
               <Plus size={16} /> Add to Schedule
             </Button>
           </form>
