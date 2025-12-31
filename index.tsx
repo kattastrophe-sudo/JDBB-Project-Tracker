@@ -1,6 +1,6 @@
 import React, { useState, createContext, useContext, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, MoreHorizontal, Clock, Tag, UserPlus, Trash2, Search, Sun, Moon } from 'lucide-react';
+import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, MoreHorizontal, Clock, Tag, UserPlus, Trash2, Search, Sun, Moon, ArrowLeft, Camera, FileText, Send, Paperclip } from 'lucide-react';
 
 // --- JDBB Design System & Constants ---
 
@@ -39,11 +39,13 @@ interface Project {
   code: string;
   title: string;
   isPublished: boolean;
+  description?: string;
 }
 
 interface ScheduleItem {
   id: string;
   semesterId: string;
+  projectId?: string; // Optional link to project
   title: string;
   date: string;
   type: 'assigned' | 'demo' | 'progress_check' | 'lab_day' | 'due' | 'critique';
@@ -63,6 +65,24 @@ interface Enrollment {
   studentNumber: string;
   tagNumber: string;
   status: 'active' | 'dropped';
+}
+
+interface CheckIn {
+  id: string;
+  projectId: string;
+  studentId: string; // Links to Profile ID for MVP simplicity
+  date: string;
+  type: 'progress' | 'submission' | 'question';
+  content: string;
+  imageMockUrl?: string; // Simulation of attachment
+}
+
+interface StudentProjectState {
+  id: string;
+  projectId: string;
+  studentId: string;
+  status: 'not_started' | 'in_progress' | 'submitted' | 'reviewed';
+  lastActivity: string;
 }
 
 // --- Theme Context ---
@@ -102,12 +122,16 @@ interface DataContextType {
   scheduleItems: ScheduleItem[];
   profiles: Profile[];
   enrollments: Enrollment[];
+  checkIns: CheckIn[];
+  projectStates: StudentProjectState[];
   currentSemesterId: string;
   setCurrentSemesterId: (id: string) => void;
   addSemester: (sem: Omit<Semester, 'id'>) => void;
   addScheduleItem: (item: Omit<ScheduleItem, 'id'>) => void;
   addStudentToSemester: (student: { name: string; email: string; studentNumber: string; tagNumber: string }, semesterId: string) => void;
   removeStudentFromSemester: (enrollmentId: string) => void;
+  addCheckIn: (checkIn: Omit<CheckIn, 'id'>) => void;
+  updateProjectStatus: (projectId: string, studentId: string, status: StudentProjectState['status']) => void;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -118,14 +142,15 @@ const initialSemesters: Semester[] = [
 ];
 
 const initialProjects: Project[] = [
-  { id: 'p-1', semesterId: 'sem-1', code: 'P1', title: 'Orthographic Rendering', isPublished: true },
-  { id: 'p-2', semesterId: 'sem-1', code: 'P2', title: 'Wax Carving Basics', isPublished: true },
+  { id: 'p-1', semesterId: 'sem-1', code: 'P1', title: 'Orthographic Rendering', isPublished: true, description: 'Create 3 views of a simple ring design using standard drafting techniques.' },
+  { id: 'p-2', semesterId: 'sem-1', code: 'P2', title: 'Wax Carving Basics', isPublished: true, description: 'Carve a signet ring from green wax tube.' },
   { id: 'p-3', semesterId: 'sem-1', code: 'P3', title: 'Lost Wax Casting', isPublished: false },
 ];
 
 const initialSchedule: ScheduleItem[] = [
-  { id: 's-1', semesterId: 'sem-1', title: 'P1 Due Date', date: '2026-02-01', type: 'due' },
-  { id: 's-2', semesterId: 'sem-1', title: 'P2 Demo Day', date: '2026-02-03', type: 'demo' },
+  { id: 's-1', semesterId: 'sem-1', projectId: 'p-1', title: 'P1 Due Date', date: '2026-02-01', type: 'due' },
+  { id: 's-2', semesterId: 'sem-1', projectId: 'p-2', title: 'P2 Demo Day', date: '2026-02-03', type: 'demo' },
+  { id: 's-3', semesterId: 'sem-1', projectId: 'p-1', title: 'P1 Rough Draft Check', date: '2026-01-20', type: 'progress_check' },
 ];
 
 const initialProfiles: Profile[] = [
@@ -139,12 +164,22 @@ const initialEnrollments: Enrollment[] = [
   { id: 'e-2', profileId: 'u-2', semesterId: 'sem-1', studentNumber: 'S1000002', tagNumber: '12', status: 'active' },
 ];
 
+const initialCheckIns: CheckIn[] = [
+  { id: 'c-1', projectId: 'p-1', studentId: 'u-1', date: '2026-01-18T10:00:00', type: 'progress', content: 'Started the top view, struggling with the shank thickness.' },
+];
+
+const initialProjectStates: StudentProjectState[] = [
+  { id: 'ps-1', projectId: 'p-1', studentId: 'u-1', status: 'in_progress', lastActivity: '2026-01-18' }
+];
+
 const DataProvider = ({ children }: { children: React.ReactNode }) => {
   const [semesters, setSemesters] = useState<Semester[]>(initialSemesters);
   const [projects, setProjects] = useState<Project[]>(initialProjects);
   const [scheduleItems, setScheduleItems] = useState<ScheduleItem[]>(initialSchedule);
   const [profiles, setProfiles] = useState<Profile[]>(initialProfiles);
   const [enrollments, setEnrollments] = useState<Enrollment[]>(initialEnrollments);
+  const [checkIns, setCheckIns] = useState<CheckIn[]>(initialCheckIns);
+  const [projectStates, setProjectStates] = useState<StudentProjectState[]>(initialProjectStates);
   const [currentSemesterId, setCurrentSemesterId] = useState<string>('sem-1');
 
   const addSemester = (sem: Omit<Semester, 'id'>) => {
@@ -183,11 +218,36 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
     setEnrollments(enrollments.filter(e => e.id !== enrollmentId));
   };
 
+  const addCheckIn = (checkIn: Omit<CheckIn, 'id'>) => {
+    const newCheckIn = { ...checkIn, id: `c-${Date.now()}` };
+    setCheckIns([newCheckIn, ...checkIns]);
+    
+    // Auto-update status to in_progress if not started
+    updateProjectStatus(checkIn.projectId, checkIn.studentId, 'in_progress');
+  };
+
+  const updateProjectStatus = (projectId: string, studentId: string, status: StudentProjectState['status']) => {
+    setProjectStates(prev => {
+      const existing = prev.find(p => p.projectId === projectId && p.studentId === studentId);
+      if (existing) {
+        return prev.map(p => p.id === existing.id ? { ...p, status, lastActivity: new Date().toISOString() } : p);
+      } else {
+        return [...prev, {
+          id: `ps-${Date.now()}`,
+          projectId,
+          studentId,
+          status,
+          lastActivity: new Date().toISOString()
+        }];
+      }
+    });
+  };
+
   return (
     <DataContext.Provider value={{ 
-      semesters, projects, scheduleItems, profiles, enrollments,
+      semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates,
       currentSemesterId, setCurrentSemesterId, addSemester, addScheduleItem,
-      addStudentToSemester, removeStudentFromSemester
+      addStudentToSemester, removeStudentFromSemester, addCheckIn, updateProjectStatus
     }}>
       {children}
     </DataContext.Provider>
@@ -207,9 +267,10 @@ const AuthContext = createContext(null);
 const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState(null);
 
+  // Mock User ID mapping for simplicity in this prototype
   const login = (role) => {
     setUser({
-      id: '123-uuid',
+      id: role === ROLES.STUDENT ? 'u-1' : 'u-admin',
       name: role === ROLES.STUDENT ? 'Alex Student (Tag 04)' : `JDBB Staff (${role})`,
       role: role,
       email: 'user@jdbb.college.edu'
@@ -309,6 +370,230 @@ const LoginScreen = () => {
               <User size={18} /> Student Login
             </Button>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// --- View: Project Detail (Student/Admin) ---
+
+const ProjectDetail = ({ projectId, onBack }: { projectId: string; onBack: () => void }) => {
+  const { projects, scheduleItems, checkIns, addCheckIn, projectStates, updateProjectStatus } = useData();
+  const { user } = useAuth();
+  
+  // Data Fetching
+  const project = projects.find(p => p.id === projectId);
+  const relevantSchedule = scheduleItems.filter(s => s.projectId === projectId || s.type === 'critique').sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+  
+  // Student Specific Data
+  const myCheckIns = checkIns.filter(c => c.projectId === projectId && c.studentId === user.id);
+  const myState = projectStates.find(s => s.projectId === projectId && s.studentId === user.id);
+  const currentStatus = myState?.status || 'not_started';
+
+  // Form State
+  const [note, setNote] = useState('');
+  const [hasFile, setHasFile] = useState(false); // Simulated file
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmitCheckIn = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!note && !hasFile) return;
+
+    setIsSubmitting(true);
+    
+    // Simulate network delay
+    setTimeout(() => {
+      addCheckIn({
+        projectId,
+        studentId: user.id,
+        date: new Date().toISOString(),
+        type: 'progress',
+        content: note,
+        imageMockUrl: hasFile ? 'https://via.placeholder.com/300' : undefined
+      });
+      setNote('');
+      setHasFile(false);
+      setIsSubmitting(false);
+    }, 600);
+  };
+
+  const handleStatusChange = (newStatus: StudentProjectState['status']) => {
+    updateProjectStatus(projectId, user.id, newStatus);
+  };
+
+  const getStatusColor = (status) => {
+    switch(status) {
+      case 'not_started': return COLORS.textLight;
+      case 'in_progress': return COLORS.pacificCyan;
+      case 'submitted': return COLORS.vintageGrape;
+      case 'reviewed': return COLORS.limeCream;
+      default: return COLORS.textLight;
+    }
+  };
+
+  if (!project) return <div>Project not found</div>;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-start gap-4">
+        <button onClick={onBack} className="mt-1 p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors">
+          <ArrowLeft size={20} className="text-slate-600 dark:text-slate-300" />
+        </button>
+        <div className="flex-1">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+             <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">{project.code}</span>
+                  <span className="text-xs uppercase tracking-wider font-bold" style={{ color: getStatusColor(currentStatus) }}>
+                    {currentStatus.replace('_', ' ')}
+                  </span>
+                </div>
+                <h1 className="text-2xl font-bold text-slate-900 dark:text-white">{project.title}</h1>
+             </div>
+             
+             {/* Status Actions */}
+             <div className="flex gap-2">
+                {currentStatus !== 'submitted' && currentStatus !== 'reviewed' && (
+                  <Button 
+                    variant="outline" 
+                    onClick={() => handleStatusChange('submitted')}
+                    className="text-xs h-8"
+                  >
+                    Mark as Submitted
+                  </Button>
+                )}
+                 {currentStatus === 'submitted' && (
+                  <span className="text-sm font-bold text-emerald-500 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-900/20 px-3 py-1 rounded-full">
+                    <CheckCircle size={14} /> Submitted for Review
+                  </span>
+                )}
+             </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        {/* Left Column: Context & Timeline */}
+        <div className="lg:col-span-1 space-y-6">
+           {/* Description Card */}
+           <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+              <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-2">Project Brief</h3>
+              <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
+                {project.description || "No description provided."}
+              </p>
+              <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800">
+                <button className="text-xs font-bold text-emerald-500 hover:underline flex items-center gap-1">
+                  <FileText size={14} /> View Grading Rubric
+                </button>
+              </div>
+           </div>
+
+           {/* Timeline */}
+           <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6">
+              <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-4 flex items-center gap-2">
+                <Calendar size={18} /> Schedule
+              </h3>
+              <div className="space-y-4">
+                 {relevantSchedule.map(item => (
+                   <div key={item.id} className="flex gap-3">
+                      <div className="flex flex-col items-center">
+                         <div className="w-2 h-2 rounded-full mt-1.5" style={{ backgroundColor: item.type === 'due' ? COLORS.vintageGrape : COLORS.pacificCyan }}></div>
+                         <div className="w-px h-full bg-slate-100 dark:bg-slate-800 my-1"></div>
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase">
+                          {new Date(item.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        </div>
+                        <div className="text-sm font-medium text-slate-800 dark:text-slate-200">{item.title}</div>
+                        <div className="text-[10px] text-slate-400 capitalize">{item.type.replace('_', ' ')}</div>
+                      </div>
+                   </div>
+                 ))}
+                 {relevantSchedule.length === 0 && <p className="text-sm text-slate-400">No dates assigned yet.</p>}
+              </div>
+           </div>
+        </div>
+
+        {/* Right Column: Check-in Feed */}
+        <div className="lg:col-span-2 space-y-6">
+          
+          {/* New Check-in Input */}
+          <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-4">
+             <h3 className="font-bold text-slate-800 dark:text-slate-200 mb-3 flex items-center gap-2">
+               <Camera size={18} className="text-emerald-500" /> New Check-in
+             </h3>
+             <form onSubmit={handleSubmitCheckIn}>
+               <textarea 
+                 className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-3 text-sm text-slate-800 dark:text-slate-200 placeholder:text-slate-400 focus:outline-none focus:border-emerald-500 transition-colors"
+                 rows={3}
+                 placeholder="What did you work on today? Any challenges?"
+                 value={note}
+                 onChange={e => setNote(e.target.value)}
+               />
+               
+               <div className="mt-3 flex items-center justify-between">
+                  <button 
+                    type="button"
+                    onClick={() => setHasFile(!hasFile)}
+                    className={`text-xs font-bold flex items-center gap-2 px-3 py-1.5 rounded transition-colors ${hasFile ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300' : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-200'}`}
+                  >
+                    {hasFile ? <CheckCircle size={14} /> : <Camera size={14} />}
+                    {hasFile ? 'Photo Attached' : 'Add Photo'}
+                  </button>
+                  
+                  <Button variant="primary" disabled={(!note && !hasFile) || isSubmitting}>
+                     {isSubmitting ? 'Posting...' : <><Send size={14} /> Post Check-in</>}
+                  </Button>
+               </div>
+             </form>
+          </div>
+
+          {/* Feed */}
+          <div className="space-y-4">
+             <h3 className="text-sm font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">History</h3>
+             {myCheckIns.length === 0 ? (
+               <div className="text-center py-12 border-2 border-dashed border-slate-200 dark:border-slate-800 rounded-lg">
+                 <p className="text-slate-400 dark:text-slate-500">No check-ins yet. Start tracking your progress!</p>
+               </div>
+             ) : (
+               myCheckIns.map(checkIn => (
+                 <div key={checkIn.id} className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden">
+                    <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex justify-between items-start">
+                       <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500">
+                             <User size={16} />
+                          </div>
+                          <div>
+                            <div className="text-sm font-bold text-slate-800 dark:text-slate-200">You</div>
+                            <div className="text-xs text-slate-500 dark:text-slate-400">
+                               {new Date(checkIn.date).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}
+                            </div>
+                          </div>
+                       </div>
+                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 bg-slate-50 dark:bg-slate-800 px-2 py-1 rounded">
+                         {checkIn.type}
+                       </span>
+                    </div>
+                    <div className="p-4">
+                       <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{checkIn.content}</p>
+                       {checkIn.imageMockUrl && (
+                         <div className="mt-4 rounded-lg overflow-hidden border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 flex items-center justify-center h-48 relative group">
+                            <div className="text-slate-400 flex flex-col items-center">
+                               <Camera size={32} className="mb-2 opacity-50" />
+                               <span className="text-xs">Image Placeholder</span>
+                            </div>
+                            {/* In real app, actual img tag here */}
+                         </div>
+                       )}
+                    </div>
+                 </div>
+               ))
+             )}
+          </div>
+
         </div>
       </div>
     </div>
@@ -593,13 +878,20 @@ const RosterManager = () => {
   );
 };
 
-// --- View: Projects (Admin) ---
+// --- View: Projects (Admin/Student List) ---
 
-const ProjectManager = () => {
-  const { projects, currentSemesterId, semesters } = useData();
+const ProjectManager = ({ onSelectProject }: { onSelectProject?: (id: string) => void }) => {
+  const { projects, currentSemesterId, semesters, projectStates } = useData();
+  const { user } = useAuth();
   
   const currentSemester = semesters.find(s => s.id === currentSemesterId);
   const semesterProjects = projects.filter(p => p.semesterId === currentSemesterId);
+
+  const getStatus = (projectId: string) => {
+    if (!user) return 'draft';
+    const state = projectStates.find(s => s.projectId === projectId && s.studentId === user.id);
+    return state?.status || 'not_started';
+  };
 
   return (
     <div className="space-y-6">
@@ -608,42 +900,71 @@ const ProjectManager = () => {
           <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Projects</h2>
           <p className="text-slate-500 dark:text-slate-400">{currentSemester?.name}</p>
         </div>
-        <Button variant="primary">
-          <Plus size={18} /> New Project
-        </Button>
+        {user.role !== ROLES.STUDENT && (
+          <Button variant="primary">
+            <Plus size={18} /> New Project
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {semesterProjects.map(project => (
-          <div key={project.id} className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col justify-between hover:shadow-md transition-shadow">
-            <div className="space-y-4">
-              <div className="flex justify-between items-start">
-                <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-600 dark:text-slate-300">{project.code}</span>
-                {project.isPublished ? (
-                  <span className="text-xs font-bold" style={{ color: COLORS.emerald }}>Published</span>
-                ) : (
-                  <span className="text-xs font-bold text-slate-400">Draft</span>
-                )}
+        {semesterProjects.map(project => {
+          const status = getStatus(project.id);
+          return (
+            <div 
+              key={project.id} 
+              onClick={() => onSelectProject && onSelectProject(project.id)}
+              className={`bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 p-6 flex flex-col justify-between hover:shadow-md hover:border-emerald-300 dark:hover:border-emerald-700 transition-all cursor-pointer group`}
+            >
+              <div className="space-y-4">
+                <div className="flex justify-between items-start">
+                  <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-600 dark:text-slate-300">{project.code}</span>
+                  {user.role !== ROLES.STUDENT ? (
+                    project.isPublished ? (
+                      <span className="text-xs font-bold" style={{ color: COLORS.emerald }}>Published</span>
+                    ) : (
+                      <span className="text-xs font-bold text-slate-400">Draft</span>
+                    )
+                  ) : (
+                    <span className="text-xs font-bold uppercase tracking-wider" style={{ 
+                      color: status === 'reviewed' ? COLORS.limeCream : 
+                             status === 'submitted' ? COLORS.vintageGrape :
+                             status === 'in_progress' ? COLORS.pacificCyan : COLORS.textLight
+                    }}>
+                      {status.replace('_', ' ')}
+                    </span>
+                  )}
+                </div>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors">{project.title}</h3>
               </div>
-              <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">{project.title}</h3>
+              
+              <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800 flex gap-2">
+                 {user.role !== ROLES.STUDENT ? (
+                   <>
+                    <Button variant="secondary" fullWidth className="text-xs">
+                      Edit
+                    </Button>
+                    <Button variant="ghost" className="text-xs px-2">
+                      <MoreHorizontal size={16} />
+                    </Button>
+                   </>
+                 ) : (
+                   <div className="text-xs text-slate-500 flex items-center gap-1">
+                      <Calendar size={14} /> View Timeline & Check-ins
+                   </div>
+                 )}
+              </div>
             </div>
-            
-            <div className="pt-6 mt-4 border-t border-slate-100 dark:border-slate-800 flex gap-2">
-               <Button variant="secondary" fullWidth className="text-xs">
-                 Edit
-               </Button>
-               <Button variant="ghost" className="text-xs px-2">
-                 <MoreHorizontal size={16} />
-               </Button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
         
-        {/* Empty State / Add New Card */}
-        <button className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg p-6 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 hover:border-emerald-300 hover:text-emerald-500 transition-colors group h-full min-h-[200px]">
-          <Plus size={32} className="mb-2 group-hover:scale-110 transition-transform" />
-          <span className="font-medium">Add Project</span>
-        </button>
+        {/* Empty State / Add New Card (Admin Only) */}
+        {user.role !== ROLES.STUDENT && (
+          <button className="border-2 border-dashed border-slate-200 dark:border-slate-700 rounded-lg p-6 flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 hover:border-emerald-300 hover:text-emerald-500 transition-colors group h-full min-h-[200px]">
+            <Plus size={32} className="mb-2 group-hover:scale-110 transition-transform" />
+            <span className="font-medium">Add Project</span>
+          </button>
+        )}
       </div>
     </div>
   );
@@ -1056,8 +1377,14 @@ const AppShell = () => {
   const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [currentView, setCurrentView] = useState('dashboard');
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
 
   if (!user) return <LoginScreen />;
+
+  const handleSelectProject = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    setCurrentView('project_detail');
+  };
 
   const renderView = () => {
     switch(currentView) {
@@ -1066,7 +1393,9 @@ const AppShell = () => {
       case 'semesters':
         return <SemesterList />;
       case 'projects':
-        return <ProjectManager />;
+        return <ProjectManager onSelectProject={handleSelectProject} />;
+      case 'project_detail':
+        return <ProjectDetail projectId={selectedProjectId!} onBack={() => setCurrentView('projects')} />;
       case 'schedule':
         return <ScheduleManager />;
       case 'roster':
@@ -1083,7 +1412,10 @@ const AppShell = () => {
         isOpen={sidebarOpen} 
         close={() => setSidebarOpen(false)} 
         currentView={currentView}
-        setView={setCurrentView}
+        setView={(view) => {
+          setCurrentView(view);
+          if (view !== 'project_detail') setSelectedProjectId(null);
+        }}
       />
       
       <main className="pt-16 lg:pl-64 min-h-screen transition-all duration-200">
