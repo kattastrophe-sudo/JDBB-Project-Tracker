@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
-import { useData, useAuth, COLORS, ROLES, supabase } from './data';
+import { useData, useAuth, COLORS, ROLES, supabase, activeUrl } from './data';
 import { Button } from './components';
 import { ArrowLeft, Clock, Layout, Calendar, AlertTriangle, AlertCircle, Settings, Camera, CheckCircle, Lock, FileText, Send, User, Users, Shield, Filter, X, Plus, Archive, Power, Play, Mail, UserPlus, Trash2, Download, HelpCircle, Edit, Database, Copy, Terminal, Key } from 'lucide-react';
 
@@ -197,11 +197,9 @@ ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
     }
     setFixLoading(true);
     try {
-        const storedUrl = localStorage.getItem('jdbb_supabase_url');
-        const defaultUrl = 'https://yqptmvtlsjyuxtzaegun.supabase.co';
-        
         // Create a temporary client with the service key
-        const tempClient = createClient(storedUrl || defaultUrl, serviceKey);
+        // Uses the globally active URL to ensure we target the correct database
+        const tempClient = createClient(activeUrl, serviceKey);
         
         const { error } = await tempClient.from('profiles').update({ role: ROLES.ADMIN_TECH }).eq('id', user.id);
         
@@ -657,157 +655,138 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
     );
 };
 
-export const ProgressMatrix = ({ onSelectStudent }) => {
-    const { projects, enrollments, currentSemesterId, projectStates, profiles } = useData();
-    const semesterProjects = projects.filter(p => p.semester_id === currentSemesterId).sort((a,b) => a.sequence_order - b.sequence_order);
-    const semesterEnrollments = enrollments.filter(e => e.semester_id === currentSemesterId).sort((a,b) => parseInt(a.tag_number || 0) - parseInt(b.tag_number || 0));
+export const StudentProfile = ({ studentId, onBack, onSelectProject }) => {
+  const { profiles, enrollments, projects, projectStates, currentSemesterId } = useData();
+  const profile = profiles.find(p => p.id === studentId);
+  const enrollment = enrollments.find(e => e.profile_id === studentId && e.semester_id === currentSemesterId);
+  const studentProjects = projects.filter(p => p.semester_id === currentSemesterId);
 
+  // If no specific profile/enrollment found, maybe just show ID or fallback
+  const displayName = profile?.full_name || enrollment?.email || 'Student';
+  const displayEmail = enrollment?.email || profile?.email || '';
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+      <div className="flex items-center gap-4">
+          <button onClick={onBack} className="p-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">
+              <ArrowLeft size={20} className="text-slate-600 dark:text-slate-300" />
+          </button>
+          <div>
+              <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{displayName}</h2>
+              {displayEmail && <p className="text-slate-500">{displayEmail}</p>}
+          </div>
+          <div className="ml-auto flex gap-2">
+             <div className="hidden md:block px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-500 border border-slate-200 dark:border-slate-700">
+                 TAG: {enrollment?.tag_number || 'N/A'}
+             </div>
+             <div className="hidden md:block px-3 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-500 border border-slate-200 dark:border-slate-700">
+                 ID: {enrollment?.student_number || 'N/A'}
+             </div>
+          </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {studentProjects.map(project => {
+              const state = projectStates.find(ps => ps.project_id === project.id && ps.student_id === studentId);
+              const status = state?.status || 'not_started';
+              
+              return (
+                  <div key={project.id} onClick={() => onSelectProject && onSelectProject(project.id, studentId)} className="bg-white dark:bg-slate-900 p-6 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 hover:border-emerald-400 dark:hover:border-emerald-600 cursor-pointer transition-all group relative overflow-hidden">
+                      <div className="flex justify-between items-start mb-4 relative z-10">
+                          <span className="font-mono text-xs font-bold text-slate-400">{project.code}</span>
+                          <span className={`text-[10px] font-bold uppercase px-2 py-1 rounded-full ${status === 'submitted' ? 'bg-purple-100 text-purple-800' : status === 'reviewed' ? 'bg-lime-100 text-lime-800' : status === 'revision_requested' ? 'bg-red-100 text-red-800' : 'bg-slate-100 text-slate-500'}`}>
+                              {status.replace('_', ' ')}
+                          </span>
+                      </div>
+                      <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 mb-2 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors relative z-10">{project.title}</h3>
+                      <div className="relative z-10 mt-4 flex items-center gap-2 text-xs text-slate-400">
+                          <Clock size={12} />
+                          {state?.last_activity_at ? `Active ${new Date(state.last_activity_at).toLocaleDateString()}` : 'No activity'}
+                      </div>
+                  </div>
+              );
+          })}
+      </div>
+    </div>
+  );
+};
+
+export const ProgressMatrix = ({ onSelectStudent }) => {
+    const { profiles, enrollments, projects, projectStates, currentSemesterId } = useData();
+    
+    const activeProjects = projects.filter(p => p.semester_id === currentSemesterId);
+    const activeEnrollments = enrollments.filter(e => e.semester_id === currentSemesterId)
+        .sort((a,b) => {
+            const tagA = parseInt(a.tag_number) || 999;
+            const tagB = parseInt(b.tag_number) || 999;
+            return tagA - tagB;
+        });
+    
     const getStatusColor = (status) => {
         switch(status) {
-            case 'reviewed': return 'bg-lime-400';
+            case 'reviewed': return 'bg-lime-400 shadow-[0_0_10px_rgba(163,230,53,0.5)]';
             case 'submitted': return 'bg-purple-400';
-            case 'in_progress': return 'bg-amber-400';
+            case 'in_progress': return 'bg-blue-400';
             case 'revision_requested': return 'bg-red-400';
-            default: return 'bg-slate-200 dark:bg-slate-700';
+            default: return 'bg-slate-200 dark:bg-slate-800';
         }
     };
-
+  
     return (
-        <div className="space-y-6">
-            <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Progress Matrix</h2>
-            <div className="overflow-x-auto pb-4">
-                <div className="min-w-max bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800">
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr>
-                                <th className="p-4 border-b border-r border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 sticky left-0 z-10 w-48 font-bold text-slate-600 dark:text-slate-300">Student</th>
-                                {semesterProjects.map(p => (
-                                    <th key={p.id} className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-500 uppercase text-center w-24">
-                                        <div className="truncate w-24" title={p.title}>{p.code}</div>
-                                    </th>
-                                ))}
-                                <th className="p-4 border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-xs font-bold text-slate-500 uppercase text-center">Avg</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {semesterEnrollments.map(enrollment => {
-                                const profile = profiles.find(p => p.id === enrollment.profile_id);
-                                const displayName = profile ? profile.full_name : (enrollment.email || 'Unknown');
-                                const displayTag = enrollment.tag_number || '??';
-                                
-                                // Simple completion calculation
-                                let completedCount = 0;
-
-                                return (
-                                    <tr key={enrollment.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
-                                        <td className="p-3 border-b border-r border-slate-100 dark:border-slate-800 sticky left-0 bg-white dark:bg-slate-900 z-10">
-                                            <div className="flex items-center gap-3 cursor-pointer" onClick={() => onSelectStudent && onSelectStudent(enrollment.profile_id)}>
-                                                <span className="font-mono text-xs font-bold text-slate-400 w-6">{displayTag}</span>
-                                                <span className="font-medium text-sm text-slate-800 dark:text-slate-200 truncate w-32">{displayName}</span>
-                                            </div>
-                                        </td>
-                                        {semesterProjects.map(p => {
-                                            const state = projectStates.find(ps => ps.project_id === p.id && ps.student_id === enrollment.profile_id);
-                                            const status = state?.status || 'not_started';
-                                            if (status === 'reviewed' || status === 'submitted') completedCount++;
-                                            
-                                            return (
-                                                <td key={p.id} className="p-3 border-b border-slate-100 dark:border-slate-800 text-center">
-                                                    <div 
-                                                        className={`w-4 h-4 rounded-full mx-auto ${getStatusColor(status)} cursor-pointer hover:scale-125 transition-transform`} 
-                                                        title={status}
-                                                        onClick={() => onSelectStudent && onSelectStudent(enrollment.profile_id)} // Ideally could open specific project detail
-                                                    />
-                                                </td>
-                                            );
-                                        })}
-                                        <td className="p-3 border-b border-slate-100 dark:border-slate-800 text-center font-mono text-xs font-bold text-slate-500">
-                                            {semesterProjects.length > 0 ? Math.round((completedCount / semesterProjects.length) * 100) : 0}%
-                                        </td>
-                                    </tr>
-                                );
-                            })}
-                        </tbody>
-                    </table>
-                </div>
+      <div className="space-y-6 animate-in fade-in zoom-in duration-300">
+          <div className="flex flex-col md:flex-row justify-between items-end gap-4">
+              <div>
+                  <h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Progress Matrix</h2>
+                  <p className="text-slate-500">Bird's-eye view of class performance.</p>
+              </div>
+              <div className="flex gap-3 text-xs font-medium text-slate-600 dark:text-slate-400">
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-blue-400"></div> Working</div>
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-purple-400"></div> Submitted</div>
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-lime-400"></div> Done</div>
+                <div className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-red-400"></div> Redo</div>
             </div>
-            <div className="flex gap-4 text-xs text-slate-500">
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-lime-400"></div> Reviewed</div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-purple-400"></div> Submitted</div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-amber-400"></div> In Progress</div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-red-400"></div> Revision Needed</div>
-                <div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full bg-slate-200 dark:bg-slate-700"></div> No Status</div>
-            </div>
-        </div>
+          </div>
+          
+          <div className="bg-white dark:bg-slate-900 rounded-xl shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden overflow-x-auto">
+              <table className="w-full text-left border-collapse">
+                  <thead>
+                      <tr className="bg-slate-50 dark:bg-slate-950 border-b border-slate-200 dark:border-slate-800">
+                          <th className="p-3 text-xs font-bold text-slate-500 uppercase sticky left-0 bg-slate-50 dark:bg-slate-950 z-20 w-48 border-r border-slate-200 dark:border-slate-800 shadow-[4px_0_8px_-4px_rgba(0,0,0,0.1)]">Student</th>
+                          {activeProjects.map(p => (
+                              <th key={p.id} className="p-3 text-xs font-bold text-slate-500 uppercase min-w-[100px] text-center border-r border-slate-100 dark:border-slate-800/50 last:border-0">
+                                  <div className="truncate w-20 mx-auto" title={p.title}>{p.code}</div>
+                              </th>
+                          ))}
+                      </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {activeEnrollments.map(student => {
+                          const profile = profiles.find(p => p.id === student.profile_id);
+                          return (
+                              <tr key={student.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+                                  <td className="p-3 sticky left-0 bg-white dark:bg-slate-900 z-10 border-r border-slate-200 dark:border-slate-800 cursor-pointer group" onClick={() => onSelectStudent && student.profile_id && onSelectStudent(student.profile_id)}>
+                                      <div className="flex items-center gap-3">
+                                          <div className="font-mono text-xs font-bold text-slate-400 w-6 text-right group-hover:text-emerald-500">{student.tag_number || '00'}</div>
+                                          <div className="min-w-0">
+                                              <div className="font-bold text-sm text-slate-700 dark:text-slate-300 truncate w-32 group-hover:text-emerald-500 transition-colors">{profile?.full_name || student.email.split('@')[0]}</div>
+                                          </div>
+                                      </div>
+                                  </td>
+                                  {activeProjects.map(p => {
+                                      const state = projectStates.find(ps => ps.project_id === p.id && ps.student_id === student.profile_id);
+                                      const status = state?.status || 'not_started';
+                                      return (
+                                          <td key={p.id} className="p-3 text-center border-r border-slate-50 dark:border-slate-800/50 last:border-0">
+                                              <div className={`w-3 h-3 rounded-full mx-auto transition-all duration-500 ${getStatusColor(status)}`} title={status}></div>
+                                          </td>
+                                      );
+                                  })}
+                              </tr>
+                          );
+                      })}
+                  </tbody>
+              </table>
+          </div>
+      </div>
     );
-};
-
-export const StudentProfile = ({ studentId, onBack, onSelectProject }) => {
-    const { profiles, enrollments, checkIns, projects, projectStates, currentSemesterId } = useData();
-    const student = profiles.find(p => p.id === studentId);
-    const enrollment = enrollments.find(e => e.profile_id === studentId && e.semester_id === currentSemesterId);
-    const studentProjects = projects.filter(p => p.semester_id === currentSemesterId);
-    
-    // Sort projects by sequence
-    studentProjects.sort((a,b) => a.sequence_order - b.sequence_order);
-
-    if (!student) return <div>Student not found</div>;
-
-    return (
-        <div className="space-y-6">
-            <button onClick={onBack} className="flex items-center gap-2 text-slate-500 hover:text-emerald-500 transition-colors mb-4"><ArrowLeft size={18} /> Back to Roster</button>
-
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 flex items-start gap-6">
-                 <div className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-full flex items-center justify-center text-3xl font-bold text-emerald-600 dark:text-emerald-400">
-                     {student.full_name?.charAt(0) || student.email?.charAt(0)}
-                 </div>
-                 <div>
-                     <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100">{student.full_name}</h1>
-                     <div className="text-slate-500">{student.email}</div>
-                     <div className="mt-2 flex gap-2">
-                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-600 dark:text-slate-300">Tag #{enrollment?.tag_number || 'N/A'}</span>
-                        <span className="px-2 py-1 bg-slate-100 dark:bg-slate-800 rounded text-xs font-bold text-slate-600 dark:text-slate-300">ID: {enrollment?.student_number || 'N/A'}</span>
-                     </div>
-                 </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                <div>
-                    <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 mb-4">Project Progress</h3>
-                    <div className="space-y-3">
-                        {studentProjects.map(project => {
-                             const state = projectStates.find(ps => ps.project_id === project.id && ps.student_id === studentId);
-                             const status = state?.status || 'not_started';
-                             return (
-                                 <div key={project.id} onClick={() => onSelectProject(project.id, studentId)} className="bg-white dark:bg-slate-900 p-4 rounded-lg border border-slate-200 dark:border-slate-800 flex justify-between items-center cursor-pointer hover:border-emerald-500 transition-colors group">
-                                     <div>
-                                         <div className="text-xs font-bold text-slate-400">{project.code}</div>
-                                         <div className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-500 transition-colors">{project.title}</div>
-                                     </div>
-                                     <div className={`text-xs font-bold px-3 py-1 rounded-full uppercase ${status === 'reviewed' ? 'bg-lime-100 text-lime-800' : status === 'submitted' ? 'bg-purple-100 text-purple-800' : 'bg-slate-100 text-slate-500'}`}>
-                                         {status.replace('_', ' ')}
-                                     </div>
-                                 </div>
-                             );
-                        })}
-                    </div>
-                </div>
-                <div>
-                    <h3 className="font-bold text-lg text-slate-800 dark:text-slate-100 mb-4">Recent Activity</h3>
-                    <div className="space-y-4">
-                        {checkIns.filter(ci => ci.student_id === studentId).slice(0, 5).map(ci => (
-                             <div key={ci.id} className="bg-slate-50 dark:bg-slate-900/50 p-4 rounded-lg border border-slate-100 dark:border-slate-800">
-                                 <div className="flex justify-between text-xs text-slate-400 mb-1">
-                                     <span>{new Date(ci.created_at).toLocaleDateString()}</span>
-                                     <span className="capitalize">{ci.type}</span>
-                                 </div>
-                                 <p className="text-sm text-slate-700 dark:text-slate-300">{ci.content}</p>
-                             </div>
-                        ))}
-                        {checkIns.filter(ci => ci.student_id === studentId).length === 0 && <div className="text-slate-400 text-sm">No activity log.</div>}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
+  };

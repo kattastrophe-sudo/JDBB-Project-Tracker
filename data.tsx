@@ -19,7 +19,7 @@ const isValidUrl = (urlString) => {
   }
 };
 
-const activeUrl = isValidUrl(STORED_URL) ? STORED_URL : (isValidUrl(CODE_URL) ? CODE_URL : null);
+export const activeUrl = isValidUrl(STORED_URL) ? STORED_URL : (isValidUrl(CODE_URL) ? CODE_URL : null);
 const activeKey = STORED_KEY || (CODE_KEY !== 'INSERT_YOUR_SUPABASE_ANON_KEY_HERE' ? CODE_KEY : null);
 
 export const isSupabaseConfigured = Boolean(activeUrl && activeKey);
@@ -275,7 +275,6 @@ export const DataProvider = ({ children }) => {
          const { data, error } = await supabase.from('enrollments').insert([enrollmentPayload]).select();
 
          if (error) {
-             console.error("Add student error details:", JSON.stringify(error, null, 2));
              let errorMessage = error.message || "Unknown database error";
              const details = error.details || '';
              
@@ -288,7 +287,11 @@ export const DataProvider = ({ children }) => {
              }
              // Check for RLS Policy violation (Code 42501)
              else if (error.code === '42501') {
+                 // Suppress noisy console error for RLS, as we show a UI message
+                 console.warn("RLS Permission Error caught in addStudentToSemester (User likely not admin in DB).");
                  errorMessage = "Permission Denied: Your database role is likely set to 'Student'. Please go to Settings > Developer Tools to fix your permissions.";
+             } else {
+                 console.error("Add student error details:", JSON.stringify(error, null, 2));
              }
              
              return { success: false, error: errorMessage };
