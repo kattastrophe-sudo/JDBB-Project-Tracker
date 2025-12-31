@@ -21,6 +21,58 @@ export const ThemeProvider = ({ children }: { children?: React.ReactNode }) => {
   return <ThemeContext.Provider value={{ isDark, toggleTheme }}>{children}</ThemeContext.Provider>;
 };
 
+// --- Helpers ---
+const compressImage = async (file) => {
+    if (!file.type.startsWith('image/')) return file;
+    
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const url = URL.createObjectURL(file);
+        
+        img.onload = () => {
+            URL.revokeObjectURL(url);
+            const canvas = document.createElement('canvas');
+            let width = img.width;
+            let height = img.height;
+            const MAX_DIM = 1280; // Reasonable limit for screen viewing
+            
+            // Maintain aspect ratio
+            if (width > height && width > MAX_DIM) {
+                height *= MAX_DIM / width;
+                width = MAX_DIM;
+            } else if (height > MAX_DIM) {
+                width *= MAX_DIM / height;
+                height = MAX_DIM;
+            }
+            
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, width, height);
+            
+            canvas.toBlob((blob) => {
+                if(blob) {
+                    // Create new file with same name but jpeg extension/type
+                    const newName = file.name.replace(/\.[^/.]+$/, "") + ".jpg";
+                    const compressedFile = new File([blob], newName, { type: 'image/jpeg', lastModified: Date.now() });
+                    resolve(compressedFile);
+                } else {
+                    // Fallback to original if compression fails
+                    console.warn("Image compression returned null blob");
+                    resolve(file);
+                }
+            }, 'image/jpeg', 0.8); // 80% Quality
+        };
+        
+        img.onerror = (e) => {
+            console.warn("Image load failed for compression", e);
+            resolve(file); // Fallback
+        };
+        
+        img.src = url;
+    });
+};
+
 export const DataContext = createContext(null);
 
 export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
@@ -352,22 +404,42 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   };
   
   const addCheckIn = async (checkIn) => {
-    if (!supabase) return;
-    const dbCheckIn = {
+    if (!supabase) return { success: false, error: 'No connection' };
+    
+    // Base payload
+    const dbCheckIn: any = {
       project_id: checkIn.projectId,
       student_id: checkIn.studentId,
-      author_id: user.id, // Explicitly set author_id so RLS policy for DELETE (uid = author_id) works
       type: checkIn.type,
       content: checkIn.content,
       image_url: checkIn.imageMockUrl
     };
-    const { data } = await supabase.from('check_ins').insert([dbCheckIn]).select();
+
+    // Try inserting with author_id (Preferred method)
+    const payloadWithAuthor = { ...dbCheckIn, author_id: user.id };
+    let { data, error } = await supabase.from('check_ins').insert([payloadWithAuthor]).select();
+
+    // Fallback: If author_id column is missing in DB (migration not run), try legacy insert
+    if (error && (error.code === '42703' || error.message?.includes('author_id'))) {
+        console.warn("author_id column missing in DB, falling back to legacy insert.");
+        const retry = await supabase.from('check_ins').insert([dbCheckIn]).select();
+        data = retry.data;
+        error = retry.error;
+    }
+
+    if (error) {
+        return { success: false, error };
+    }
+
     if (data) {
         setCheckIns(prev => [data[0], ...prev]);
         if (checkIn.type !== 'instructor_comment') {
             updateProjectStatus(checkIn.projectId, checkIn.studentId, 'in_progress');
         }
+        return { success: true };
     }
+    
+    return { success: false, error: 'No data returned' };
   };
   
   const deleteCheckIn = async (id) => {
@@ -382,16 +454,27 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
   const uploadFile = async (file) => {
       if (!supabase) return { success: false, error: 'No connection' };
       
-      // 1. Client-side Size Validation (5MB)
-      const LIMIT_MB = 5;
-      if (file.size > LIMIT_MB * 1024 * 1024) {
+      let fileToUpload = file;
+      
+      try {
+          // Attempt compression for images
+          if (file.type.startsWith('image/')) {
+              fileToUpload = await compressImage(file);
+          }
+      } catch (e) {
+          console.warn("Compression failed, using original file", e);
+      }
+      
+      // Client-side Size Validation (Increased to 20MB as fallback for non-images or failed compression)
+      const LIMIT_MB = 20;
+      if (fileToUpload.size > LIMIT_MB * 1024 * 1024) {
           return { success: false, error: `File is too large. Max size is ${LIMIT_MB}MB.` };
       }
 
-      const fileName = `${user.id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
+      const fileName = `${user.id}/${Date.now()}_${fileToUpload.name.replace(/[^a-zA-Z0-9.]/g, '')}`;
       
       try {
-          const { data, error } = await supabase.storage.from('checkins').upload(fileName, file);
+          const { data, error } = await supabase.storage.from('checkins').upload(fileName, fileToUpload);
           
           if (error) {
               console.error("Upload error:", error);

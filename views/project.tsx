@@ -238,9 +238,15 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
             }
         }
         
-        await addCheckIn({ projectId, studentId, type: 'progress', content: checkInText, imageMockUrl: publicUrl });
-        setCheckInText('');
-        setImageFile(null);
+        const result = await addCheckIn({ projectId, studentId, type: 'progress', content: checkInText, imageMockUrl: publicUrl });
+        
+        if (result && result.success) {
+            setCheckInText('');
+            setImageFile(null);
+        } else {
+            alert("Failed to post update: " + (result?.error?.message || "Unknown error"));
+        }
+        
         setIsUploading(false);
     };
     
@@ -314,8 +320,14 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                                         )}
                                     </div>
                                     {canDelete && (
-                                        <div className="absolute top-2 right-2">
-                                            <button onClick={() => handleDeleteCheckIn(ci.id)} className="p-2 text-slate-200 dark:text-slate-700 hover:text-red-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" title="Delete Post"><Trash2 size={14}/></button>
+                                        <div className="absolute top-2 right-2 z-10">
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleDeleteCheckIn(ci.id); }} 
+                                                className="p-2 text-slate-400 hover:text-red-500 rounded-full hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors" 
+                                                title="Delete Post"
+                                            >
+                                                <Trash2 size={16}/>
+                                            </button>
                                         </div>
                                     )}
                                 </div>
