@@ -455,9 +455,10 @@ export const DataProvider = ({ children }: { children?: React.ReactNode }) => {
 
     // Check if any rows were actually deleted
     if (!data || data.length === 0) {
+        // We return a specific code so the UI knows to show the Permission Fix prompt
         return { 
             success: false, 
-            error: { message: "Failed to delete: You may not have permission to delete this post." } 
+            error: { code: 'ERR_RLS', message: "Failed to delete: You may not have permission to delete this post." } 
         };
     }
 

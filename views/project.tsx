@@ -196,7 +196,7 @@ export const ScheduleManager = () => {
 };
 
 export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
-    const { projects, checkIns, addCheckIn, deleteCheckIn, projectStates, updateInstructorNotes, updateProjectStatus, uploadFile } = useData();
+    const { projects, checkIns, addCheckIn, deleteCheckIn, projectStates, updateInstructorNotes, updateProjectStatus, uploadFile, profiles } = useData();
     const { user } = useAuth();
     const project = projects.find(p => p.id === projectId);
     const [note, setNote] = useState('');
@@ -258,7 +258,11 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
             setDeletingId(null);
             
             if(!res.success) {
-                 alert("Delete failed: " + (res.error?.message || "Unknown error"));
+                 if (res.error?.code === 'ERR_RLS') {
+                     alert("PERMISSION DENIED: You cannot delete this post yet.\n\nPlease go to Settings > Developer Tools and click 'Copy SQL' under 'Fix: Repair Delete Permissions', then run it in Supabase.");
+                 } else {
+                     alert("Delete failed: " + (res.error?.message || "Unknown error"));
+                 }
             }
         }
     };
@@ -299,16 +303,25 @@ export const ProjectDetail = ({ projectId, targetStudentId, onBack }) => {
                     <div className="space-y-4">
                         {studentCheckIns.length === 0 && <div className="p-8 text-center bg-slate-50 dark:bg-slate-900 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-slate-400">No activity recorded yet.</div>}
                         {studentCheckIns.map(ci => {
+                            // DETERMINE AUTHOR LABEL
+                            const authorProfile = profiles.find(p => p.id === ci.author_id);
+                            const isAuthorAdmin = authorProfile && (authorProfile.role === ROLES.ADMIN_TECH || authorProfile.role === ROLES.ADMIN_INSTRUCTOR);
+                            // If author is found and is admin, show "Instructor". 
+                            // If author is NOT found (legacy), rely on type.
+                            // If author is found and is student, show "Student".
+                            const authorLabel = isAuthorAdmin ? 'Instructor' : (ci.type === 'instructor_comment' ? 'Instructor' : 'Student');
+                            
                             const canDelete = user.role !== ROLES.STUDENT || ci.type !== 'instructor_comment';
                             const isDeleting = deletingId === ci.id;
+                            
                             return (
                                 <div key={ci.id} className={`bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-100 dark:border-slate-800 flex gap-4 group relative ${isDeleting ? 'opacity-50' : ''}`}>
                                     <div className="w-10 h-10 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center flex-shrink-0 text-slate-500">
-                                        {ci.type === 'instructor_comment' ? <Shield size={18} /> : <User size={18} />}
+                                        {authorLabel === 'Instructor' ? <Shield size={18} /> : <User size={18} />}
                                     </div>
                                     <div className="flex-1">
                                         <div className="flex items-center gap-2 mb-1">
-                                            <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{ci.type === 'instructor_comment' ? 'Instructor' : 'Student'}</span>
+                                            <span className="font-bold text-sm text-slate-800 dark:text-slate-200">{authorLabel}</span>
                                             <span className="text-xs text-slate-400">{new Date(ci.created_at).toLocaleString()}</span>
                                         </div>
                                         <p className="text-slate-600 dark:text-slate-400 text-sm whitespace-pre-wrap">{ci.content}</p>
