@@ -254,15 +254,20 @@ export const DataProvider = ({ children }) => {
          const { data, error } = await supabase.from('enrollments').insert([enrollmentPayload]).select();
 
          if (error) {
-             console.error("Add student error details:", error);
+             console.error("Add student error details:", JSON.stringify(error, null, 2));
              let errorMessage = error.message || "Unknown database error";
+             const details = error.details || '';
              
              // Check for unique constraint violation (Code 23505)
              if (error.code === '23505') {
-                if (error.message?.includes('tag_number')) errorMessage = `Tag Number #${studentData.tagNumber} is already taken in this semester.`;
-                else if (error.message?.includes('student_number')) errorMessage = `Student Number ${studentData.studentNumber} is already enrolled.`;
-                else if (error.message?.includes('email')) errorMessage = `Email ${studentData.email} is already enrolled.`;
-                else errorMessage = "Duplicate entry found (Tag, Email, or Student # already exists).";
+                if (errorMessage.includes('tag_number') || details.includes('tag_number')) errorMessage = `Tag Number #${studentData.tagNumber} is already taken in this semester.`;
+                else if (errorMessage.includes('student_number') || details.includes('student_number')) errorMessage = `Student Number ${studentData.studentNumber} is already enrolled.`;
+                else if (errorMessage.includes('email') || details.includes('email')) errorMessage = `Email ${studentData.email} is already enrolled.`;
+                else errorMessage = "Duplicate entry found. This student or tag number is already enrolled.";
+             }
+             // Check for RLS Policy violation (Code 42501)
+             else if (error.code === '42501') {
+                 errorMessage = "Permission Denied: Your account is not authorized to add students. Ensure you are logged in as an Administrator.";
              }
              
              return { success: false, error: errorMessage };
