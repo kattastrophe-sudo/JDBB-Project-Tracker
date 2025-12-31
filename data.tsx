@@ -2,11 +2,41 @@ import React, { useState, createContext, useContext, useEffect } from 'react';
 import { createClient } from '@supabase/supabase-js';
 
 // --- SUPABASE CONFIGURATION ---
-// TODO: Replace these with your actual values from Supabase Dashboard -> Project Settings -> API
-const SUPABASE_URL = 'INSERT_YOUR_SUPABASE_URL_HERE';
-const SUPABASE_ANON_KEY = 'INSERT_YOUR_SUPABASE_ANON_KEY_HERE';
+// We check LocalStorage first to allow UI-based configuration, then fall back to code constants.
+const STORED_URL = localStorage.getItem('jdbb_supabase_url');
+const STORED_KEY = localStorage.getItem('jdbb_supabase_key');
 
-export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const CODE_URL = 'INSERT_YOUR_SUPABASE_URL_HERE';
+const CODE_KEY = 'INSERT_YOUR_SUPABASE_ANON_KEY_HERE';
+
+// Helper to validate URL format
+const isValidUrl = (urlString) => {
+  try { 
+    return Boolean(new URL(urlString)); 
+  } catch(e) { 
+    return false; 
+  }
+};
+
+const activeUrl = isValidUrl(STORED_URL) ? STORED_URL : (isValidUrl(CODE_URL) ? CODE_URL : null);
+const activeKey = STORED_KEY || (CODE_KEY !== 'INSERT_YOUR_SUPABASE_ANON_KEY_HERE' ? CODE_KEY : null);
+
+export const isSupabaseConfigured = Boolean(activeUrl && activeKey);
+
+// Safely initialize client. If not configured, this remains null but doesn't crash the app.
+export const supabase = isSupabaseConfigured ? createClient(activeUrl, activeKey) : null;
+
+export const saveConfiguration = (url, key) => {
+  localStorage.setItem('jdbb_supabase_url', url);
+  localStorage.setItem('jdbb_supabase_key', key);
+  window.location.reload();
+};
+
+export const clearConfiguration = () => {
+  localStorage.removeItem('jdbb_supabase_url');
+  localStorage.removeItem('jdbb_supabase_key');
+  window.location.reload();
+};
 
 // --- JDBB Design System & Constants ---
 
@@ -61,13 +91,12 @@ export const DataProvider = ({ children }) => {
   const [enrollments, setEnrollments] = useState([]);
   const [checkIns, setCheckIns] = useState([]);
   const [projectStates, setProjectStates] = useState([]);
-  const [notificationLogs, setNotificationLogs] = useState([]); // Still local for now
+  const [notificationLogs, setNotificationLogs] = useState([]); 
   const [currentSemesterId, setCurrentSemesterId] = useState(null);
 
   // Fetch Data when User logs in
   useEffect(() => {
-    if (!user) {
-      // Clear data on logout
+    if (!user || !supabase) {
       setSemesters([]);
       setProjects([]);
       setScheduleItems([]);
@@ -122,13 +151,12 @@ export const DataProvider = ({ children }) => {
 
     fetchData();
 
-    // Set up Realtime Subscriptions (Optional for MVP, but good for updates)
+    // Set up Realtime Subscriptions
     const channels = supabase.channel('custom-all-channel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'check_ins' }, (payload) => {
         if(payload.eventType === 'INSERT') setCheckIns(prev => [payload.new, ...prev]);
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'project_states' }, (payload) => {
-         // Re-fetch strictly to ensure consistency or handle local merge
          supabase.from('project_states').select('*').then(res => { if(res.data) setProjectStates(res.data); });
       })
       .subscribe();
@@ -142,11 +170,13 @@ export const DataProvider = ({ children }) => {
   // --- ACTIONS ---
 
   const addSemester = async (sem) => {
+    if (!supabase) return;
     const { data, error } = await supabase.from('semesters').insert([sem]).select();
     if (data) setSemesters(prev => [...prev, data[0]]);
   };
 
   const toggleSemesterStatus = async (id) => {
+    if (!supabase) return;
     const sem = semesters.find(s => s.id === id);
     if (!sem) return;
     const { data } = await supabase.from('semesters').update({ is_active: !sem.is_active }).eq('id', id).select();
@@ -154,7 +184,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const addProject = async (project) => {
-    // Convert camelCase to snake_case for DB
+    if (!supabase) return;
     const dbProject = {
       semester_id: project.semesterId,
       code: project.code,
@@ -167,6 +197,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const addScheduleItem = async (item) => {
+    if (!supabase) return;
     const dbItem = {
       semester_id: item.semesterId,
       title: item.title,
@@ -178,11 +209,7 @@ export const DataProvider = ({ children }) => {
   };
   
   const addStudentToSemester = async (studentData, semesterId) => {
-     // NOTE: Creating a new user via API is tricky without Admin Auth client. 
-     // For this MVP, we assume the Profile exists or we are just creating the Enrollment.
-     // If Profile doesn't exist, this will fail. User should be created in Supabase Auth first.
-     // However, we can check if profile exists by email.
-     
+     if (!supabase) return;
      const { data: profileData } = await supabase.from('profiles').select('id').eq('email', studentData.email).single();
      
      if (!profileData) {
@@ -200,18 +227,19 @@ export const DataProvider = ({ children }) => {
 
      if (data) {
          setEnrollments(prev => [...prev, data[0]]);
-         // Refresh profiles just in case
          const { data: p } = await supabase.from('profiles').select('*');
          if(p) setProfiles(p);
      }
   };
 
   const removeStudentFromSemester = async (enrollmentId) => {
+    if (!supabase) return;
     await supabase.from('enrollments').delete().eq('id', enrollmentId);
     setEnrollments(prev => prev.filter(e => e.id !== enrollmentId));
   };
   
   const addCheckIn = async (checkIn) => {
+    if (!supabase) return;
     const dbCheckIn = {
       project_id: checkIn.projectId,
       student_id: checkIn.studentId,
@@ -229,7 +257,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const updateProjectStatus = async (projectId, studentId, status) => {
-    // Upsert logic
+    if (!supabase) return;
     const { data: existing } = await supabase.from('project_states').select('id').match({project_id: projectId, student_id: studentId}).single();
     
     if (existing) {
@@ -247,6 +275,7 @@ export const DataProvider = ({ children }) => {
   };
 
   const updateInstructorNotes = async (projectId, studentId, notes) => {
+    if (!supabase) return;
     const { data: existing } = await supabase.from('project_states').select('id').match({project_id: projectId, student_id: studentId}).single();
     if (existing) {
         const { data } = await supabase.from('project_states').update({ instructor_notes: notes }).eq('id', existing.id).select();
@@ -263,7 +292,6 @@ export const DataProvider = ({ children }) => {
   };
 
   const runDailyReminders = () => {
-    // Mock for now
     setNotificationLogs(prev => prev);
   };
 
@@ -286,6 +314,8 @@ export const AuthProvider = ({ children }) => {
   const [session, setSession] = useState(null);
 
   useEffect(() => {
+    if (!supabase) return;
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
@@ -303,7 +333,7 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const fetchProfile = async (authUser) => {
-      // Fetch the custom profile (role, name) from 'profiles' table
+      if (!supabase) return;
       const { data, error } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
       if (data) {
           setUser({
@@ -313,24 +343,24 @@ export const AuthProvider = ({ children }) => {
               name: data.full_name || authUser.email
           });
       } else {
-          // If profile doesn't exist yet (first login?), we might need to rely on basic info or create one
-          // For safety, default to student role locally if not found, though DB RLS might block.
           console.warn("Profile not found for user", authUser.id);
           setUser({
             id: authUser.id,
             email: authUser.email,
-            role: ROLES.STUDENT, // Fallback
+            role: ROLES.STUDENT, 
             name: authUser.email
           });
       }
   };
 
   const login = async (email, password) => {
+      if (!supabase) throw new Error("Database not connected");
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) throw error;
   };
 
   const logout = async () => {
+      if (!supabase) return;
       await supabase.auth.signOut();
   };
 

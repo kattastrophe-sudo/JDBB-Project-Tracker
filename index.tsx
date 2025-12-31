@@ -1,9 +1,63 @@
 import React, { useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { User, Shield, Users, CheckCircle, ArrowLeft, LogIn, AlertCircle } from 'lucide-react';
-import { ThemeProvider, AuthProvider, DataProvider, useAuth, ROLES, COLORS } from './data';
+import { User, Shield, Users, CheckCircle, ArrowLeft, LogIn, AlertCircle, Database, Save } from 'lucide-react';
+import { ThemeProvider, AuthProvider, DataProvider, useAuth, ROLES, COLORS, isSupabaseConfigured, saveConfiguration, clearConfiguration } from './data';
 import { Navbar, Sidebar, Button } from './components';
 import { StudentDashboard, AdminDashboard, SemesterManager, ProjectManager, ProjectDetail, StudentProfile, ScheduleManager, ProgressMatrix, RosterManager, AdminSettings } from './views';
+
+// --- Setup Screen ---
+const SetupScreen = () => {
+  const [url, setUrl] = useState('');
+  const [key, setKey] = useState('');
+  
+  const handleSave = (e) => {
+    e.preventDefault();
+    if(url && key) saveConfiguration(url, key);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-slate-900 text-white p-4">
+      <div className="max-w-md w-full bg-slate-800 p-8 rounded-lg shadow-2xl border border-slate-700">
+        <div className="flex items-center gap-3 mb-6 text-emerald-400">
+          <Database size={32} />
+          <h1 className="text-2xl font-bold">Connect Database</h1>
+        </div>
+        <p className="text-slate-400 mb-6">
+          To run the JDBB Project Tracker, you need to connect your Supabase project. 
+          Enter your API details below.
+        </p>
+        <form onSubmit={handleSave} className="space-y-4">
+          <div>
+            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Project URL</label>
+            <input 
+              type="text" 
+              value={url}
+              onChange={e => setUrl(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded p-3 text-sm focus:border-emerald-500 outline-none transition-colors"
+              placeholder="https://xyz.supabase.co"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-bold uppercase text-slate-500 mb-1">Anon Key</label>
+            <input 
+              type="password" 
+              value={key}
+              onChange={e => setKey(e.target.value)}
+              className="w-full bg-slate-900 border border-slate-700 rounded p-3 text-sm focus:border-emerald-500 outline-none transition-colors"
+              placeholder="eyJxh..."
+              required
+            />
+          </div>
+          <Button type="submit" variant="primary" fullWidth><Save size={16}/> Connect & Restart</Button>
+        </form>
+        <div className="mt-6 text-xs text-slate-500 text-center">
+          These keys will be saved to your browser's Local Storage.
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // --- Login Screen ---
 
@@ -30,10 +84,11 @@ const LoginScreen = () => {
   return (
     <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-slate-950 p-4 transition-colors">
       <div className="max-w-md w-full bg-white dark:bg-slate-900 p-8 rounded-lg shadow-lg border-t-4 transition-colors" style={{ borderColor: COLORS.emerald }}>
-        <div className="text-center mb-8">
+        <div className="text-center mb-8 relative">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-gradient-to-br from-emerald-400 to-cyan-600 text-white font-bold text-lg shadow-lg mb-4">JD</div>
           <h1 className="text-2xl font-bold mb-2 text-slate-800 dark:text-white">JDBB Project Tracker</h1>
           <p className="text-slate-500 dark:text-slate-400">Sign in to access your dashboard.</p>
+          <button onClick={clearConfiguration} className="absolute top-0 right-0 text-slate-300 hover:text-red-500 text-xs" title="Reset Database Connection"><Database size={14}/></button>
         </div>
         
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -92,8 +147,6 @@ const AppShell = () => {
   const handleInstructorSelectProject = (projectId, studentId) => { setSelectedProjectId(projectId); setSelectedStudentId(studentId); setCurrentView('project_detail'); };
 
   const renderView = () => {
-    // SECURITY GUARD: Strictly prevent Students from rendering Admin-only components
-    // This ensures even if currentView state is manipulated, data is not shown.
     if (user.role === ROLES.STUDENT) {
       if (['semesters', 'matrix', 'roster', 'settings'].includes(currentView)) {
         return <StudentDashboard />;
@@ -137,5 +190,9 @@ const App = () => {
   );
 };
 
+const Root = () => {
+  return isSupabaseConfigured ? <App /> : <SetupScreen />;
+};
+
 const root = createRoot(document.getElementById('root'));
-root.render(<App />);
+root.render(<Root />);
