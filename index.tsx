@@ -1,6 +1,6 @@
 import React, { useState, createContext, useContext, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
-import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, ChevronRight, MoreHorizontal } from 'lucide-react';
+import { User, Shield, Users, Calendar, Layout, LogOut, Menu, CheckCircle, AlertCircle, Plus, ChevronRight, MoreHorizontal, Clock, Tag } from 'lucide-react';
 
 // --- JDBB Design System & Constants ---
 
@@ -58,6 +58,7 @@ interface DataContextType {
   currentSemesterId: string;
   setCurrentSemesterId: (id: string) => void;
   addSemester: (sem: Omit<Semester, 'id'>) => void;
+  addScheduleItem: (item: Omit<ScheduleItem, 'id'>) => void;
 }
 
 const DataContext = createContext<DataContextType | null>(null);
@@ -89,10 +90,15 @@ const DataProvider = ({ children }: { children: React.ReactNode }) => {
     setSemesters([...semesters, newSem]);
   };
 
+  const addScheduleItem = (item: Omit<ScheduleItem, 'id'>) => {
+    const newItem = { ...item, id: `s-${Date.now()}` };
+    setScheduleItems([...scheduleItems, newItem].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+  };
+
   return (
     <DataContext.Provider value={{ 
       semesters, projects, scheduleItems, 
-      currentSemesterId, setCurrentSemesterId, addSemester 
+      currentSemesterId, setCurrentSemesterId, addSemester, addScheduleItem
     }}>
       {children}
     </DataContext.Provider>
@@ -328,6 +334,146 @@ const ProjectManager = () => {
   );
 }
 
+// --- View: Schedule Manager (Admin) ---
+
+const ScheduleManager = () => {
+  const { scheduleItems, currentSemesterId, semesters, addScheduleItem } = useData();
+  const currentSemester = semesters.find(s => s.id === currentSemesterId);
+  
+  // Filter and sort items
+  const semesterItems = scheduleItems
+    .filter(s => s.semesterId === currentSemesterId)
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
+  // Quick Add State
+  const [newItemDate, setNewItemDate] = useState('');
+  const [newItemTitle, setNewItemTitle] = useState('');
+  const [newItemType, setNewItemType] = useState<ScheduleItem['type']>('due');
+
+  const handleAdd = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newItemDate || !newItemTitle) return;
+
+    addScheduleItem({
+      semesterId: currentSemesterId,
+      title: newItemTitle,
+      date: newItemDate,
+      type: newItemType
+    });
+    
+    // Reset form
+    setNewItemTitle('');
+  };
+
+  const getTypeStyle = (type: string) => {
+    switch(type) {
+      case 'due': return { bg: 'bg-pink-100', text: 'text-pink-800', label: 'Due Date', border: 'border-pink-200' };
+      case 'demo': return { bg: 'bg-blue-100', text: 'text-blue-800', label: 'Demo', border: 'border-blue-200' };
+      case 'critique': return { bg: 'bg-purple-100', text: 'text-purple-800', label: 'Critique', border: 'border-purple-200' };
+      case 'progress_check': return { bg: 'bg-orange-100', text: 'text-orange-800', label: 'Check-in', border: 'border-orange-200' };
+      case 'lab_day': return { bg: 'bg-slate-100', text: 'text-slate-800', label: 'Lab Day', border: 'border-slate-200' };
+      default: return { bg: 'bg-slate-100', text: 'text-slate-800', label: type, border: 'border-slate-200' };
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h2 className="text-2xl font-bold text-slate-800">Schedule</h2>
+        <p className="text-slate-500">Timeline for {currentSemester?.name}</p>
+      </div>
+
+      {/* Quick Add Form */}
+      <div className="bg-white p-4 rounded-lg shadow-sm border border-slate-200">
+        <h3 className="text-sm font-bold text-slate-700 mb-3 flex items-center gap-2">
+          <Clock size={16} /> Quick Add Event
+        </h3>
+        <form onSubmit={handleAdd} className="flex flex-col md:flex-row gap-3">
+          <input 
+            type="date" 
+            value={newItemDate}
+            onChange={(e) => setNewItemDate(e.target.value)}
+            className="border border-slate-300 rounded px-3 py-2 text-sm text-slate-600 bg-white focus:outline-none focus:border-emerald-500"
+            required
+          />
+          <select 
+            value={newItemType}
+            onChange={(e) => setNewItemType(e.target.value as any)}
+            className="border border-slate-300 rounded px-3 py-2 text-sm text-slate-600 bg-white focus:outline-none focus:border-emerald-500"
+          >
+            <option value="due">Due Date</option>
+            <option value="demo">Demo Day</option>
+            <option value="progress_check">Progress Check</option>
+            <option value="lab_day">Lab Day</option>
+            <option value="critique">Critique</option>
+          </select>
+          <input 
+            type="text" 
+            placeholder="Event Title (e.g., P1 Final Submission)"
+            value={newItemTitle}
+            onChange={(e) => setNewItemTitle(e.target.value)}
+            className="border border-slate-300 rounded px-3 py-2 text-sm text-slate-600 bg-white flex-1 focus:outline-none focus:border-emerald-500 placeholder:text-slate-400"
+            required
+          />
+          <Button variant="primary" className="whitespace-nowrap">
+            <Plus size={16} /> Add to Schedule
+          </Button>
+        </form>
+      </div>
+
+      {/* Schedule List */}
+      <div className="bg-white rounded-lg shadow-sm border border-slate-200 overflow-hidden">
+        {semesterItems.length === 0 ? (
+          <div className="p-8 text-center text-slate-400">
+            No items scheduled yet. Add one above.
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100">
+            {semesterItems.map(item => {
+              const style = getTypeStyle(item.type);
+              const dateObj = new Date(item.date);
+              
+              return (
+                <div key={item.id} className="p-4 flex flex-col md:flex-row md:items-center gap-4 hover:bg-slate-50 transition-colors">
+                  {/* Date Badge */}
+                  <div className="flex-shrink-0 w-16 text-center border-r border-slate-100 pr-4 md:pr-0 md:border-r-0 md:w-24">
+                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wide">
+                      {dateObj.toLocaleDateString('en-US', { month: 'short' })}
+                    </div>
+                    <div className="text-xl font-bold text-slate-800">
+                      {dateObj.getDate()}
+                    </div>
+                    <div className="text-xs text-slate-400">
+                       {dateObj.toLocaleDateString('en-US', { weekday: 'short' })}
+                    </div>
+                  </div>
+
+                  {/* Content */}
+                  <div className="flex-1">
+                     <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border ${style.bg} ${style.text} ${style.border}`}>
+                          {style.label}
+                        </span>
+                     </div>
+                     <div className="font-bold text-slate-800">{item.title}</div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex items-center gap-2 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" className="h-8 w-8 p-0">
+                      <MoreHorizontal size={16} />
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
 // --- View Content ---
 
 const StudentDashboard = () => {
@@ -482,6 +628,12 @@ const Sidebar = ({ isOpen, close, currentView, setView }) => {
     { 
       id: 'projects',
       label: 'Projects', 
+      icon: Tag, 
+      roles: [ROLES.ADMIN_TECH, ROLES.ADMIN_INSTRUCTOR, ROLES.MONITOR, ROLES.STUDENT] 
+    },
+    { 
+      id: 'schedule',
+      label: 'Schedule', 
       icon: Calendar, 
       roles: [ROLES.ADMIN_TECH, ROLES.ADMIN_INSTRUCTOR, ROLES.MONITOR, ROLES.STUDENT] 
     },
@@ -555,6 +707,8 @@ const AppShell = () => {
         return <SemesterList />;
       case 'projects':
         return <ProjectManager />;
+      case 'schedule':
+        return <ScheduleManager />;
       default:
         return user.role === ROLES.STUDENT ? <StudentDashboard /> : <AdminDashboard />;
     }
