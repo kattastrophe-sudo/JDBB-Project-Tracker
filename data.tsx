@@ -194,6 +194,10 @@ export const DataProvider = ({ children }) => {
   const addSemester = async (sem) => {
     if (!supabase) return;
     const { data, error } = await supabase.from('semesters').insert([sem]).select();
+    if (error) {
+       console.error("Add Semester Error:", error);
+       alert("Failed to add semester. If you are an admin, check Settings > Developer Tools to fix permissions.");
+    }
     if (data) setSemesters(prev => [...prev, data[0]]);
   };
 
@@ -214,7 +218,11 @@ export const DataProvider = ({ children }) => {
       description: project.description,
       is_published: project.isPublished
     };
-    const { data } = await supabase.from('projects').insert([dbProject]).select();
+    const { data, error } = await supabase.from('projects').insert([dbProject]).select();
+    if (error) {
+       console.error("Add Project Error:", error);
+       alert("Failed to add project. " + (error.code === '42501' ? "Permission denied. Please fix your database role in Settings > Developer Tools." : error.message));
+    }
     if (data) setProjects(prev => [...prev, data[0]]);
   };
 
@@ -226,7 +234,11 @@ export const DataProvider = ({ children }) => {
       date: item.date,
       type: item.type
     };
-    const { data } = await supabase.from('schedule_items').insert([dbItem]).select();
+    const { data, error } = await supabase.from('schedule_items').insert([dbItem]).select();
+    if (error) {
+       console.error("Add Schedule Item Error:", error);
+       alert("Failed to add item. " + (error.code === '42501' ? "Permission denied. Please fix your database role in Settings > Developer Tools." : error.message));
+    }
     if (data) setScheduleItems(prev => [...prev, data[0]].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
   };
   
@@ -276,7 +288,7 @@ export const DataProvider = ({ children }) => {
              }
              // Check for RLS Policy violation (Code 42501)
              else if (error.code === '42501') {
-                 errorMessage = "Permission Denied: Database policy prevents manual enrollment. Please ask the student to join using the Course Code.";
+                 errorMessage = "Permission Denied: Your database role is likely set to 'Student'. Please go to Settings > Developer Tools to fix your permissions.";
              }
              
              return { success: false, error: errorMessage };
@@ -344,7 +356,7 @@ export const DataProvider = ({ children }) => {
         if (error) {
             // Check for RLS Policy violation (Code 42501)
              if (error.code === '42501') {
-                 return { success: false, error: "Permission Denied: You are not authorized to change user roles." };
+                 return { success: false, error: "Permission Denied: You are not authorized to change user roles. Check Settings > Developer Tools." };
              }
              throw error;
         }
