@@ -88,6 +88,28 @@ ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
 
   const schemaFixCommand = `ALTER TABLE projects ADD COLUMN IF NOT EXISTS rubric_url text;`;
 
+  // COMPREHENSIVE FIX FOR CHECK-IN DELETION
+  const permissionsFixCommand = `-- 1. Drop existing policies to remove conflicts
+DROP POLICY IF EXISTS "Enable delete for users based on user_id" ON check_ins;
+DROP POLICY IF EXISTS "Enable delete for owners and admins" ON check_ins;
+
+-- 2. Create a comprehensive DELETE policy
+-- This allows:
+-- A) The Author (auth.uid = author_id) to delete
+-- B) The Student to delete if author_id is missing (legacy fix)
+-- C) Admins (Technologist/Instructor) to delete ANY post
+CREATE POLICY "Enable delete for owners and admins" ON check_ins FOR DELETE
+USING (
+  auth.uid() = author_id 
+  OR (author_id IS NULL AND auth.uid() = student_id)
+  OR 
+  EXISTS (
+    SELECT 1 FROM profiles 
+    WHERE id = auth.uid() 
+    AND role IN ('admin_technologist', 'admin_instructor')
+  )
+);`;
+
   const copyToClipboard = (text) => {
     navigator.clipboard.writeText(text);
     setCopied(true);
@@ -156,12 +178,15 @@ ALTER TABLE profiles ALTER COLUMN role SET DEFAULT 'admin_technologist';`;
                     </div>
                  </div>
                  
-                 <div className="bg-slate-950 p-4 rounded border border-slate-800">
-                    <h4 className="font-bold text-emerald-400 mb-2">Fix: Add Missing Rubric Column</h4>
-                    <p className="text-[10px] text-slate-400 mb-1">Run this if you see "Could not find 'rubric_url' column".</p>
+                 <div className="bg-slate-900 p-4 rounded border border-slate-700 shadow-lg md:col-span-2 relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-1 h-full bg-emerald-500"></div>
+                    <h4 className="font-bold text-white mb-2 flex items-center gap-2"><Trash2 size={16}/> Fix: Repair Delete Permissions</h4>
+                    <p className="text-xs text-slate-300 mb-3">
+                        If you cannot delete posts, run this SQL. It enables deletion for Admins and fixes issues where older posts can't be deleted by students.
+                    </p>
                     <div className="relative group mb-2">
-                        <pre className="bg-black p-3 rounded text-[10px] font-mono text-slate-300 overflow-x-auto border border-slate-800">{schemaFixCommand}</pre>
-                        <button onClick={() => copyToClipboard(schemaFixCommand)} className="absolute top-1 right-1 text-xs bg-slate-800 text-white px-2 py-1 rounded">Copy</button>
+                        <pre className="bg-black p-3 rounded text-[10px] font-mono text-emerald-300 overflow-x-auto border border-slate-800 max-h-32">{permissionsFixCommand}</pre>
+                        <button onClick={() => copyToClipboard(permissionsFixCommand)} className="absolute top-2 right-2 text-xs bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded font-bold shadow-sm transition-colors">Copy SQL</button>
                     </div>
                  </div>
 
