@@ -276,7 +276,7 @@ export const DataProvider = ({ children }) => {
              }
              // Check for RLS Policy violation (Code 42501)
              else if (error.code === '42501') {
-                 errorMessage = "Permission Denied: Your account is not authorized to enroll this student.";
+                 errorMessage = "Permission Denied: Database policy prevents manual enrollment. Please ask the student to join using the Course Code.";
              }
              
              return { success: false, error: errorMessage };
@@ -292,6 +292,43 @@ export const DataProvider = ({ children }) => {
          const msg = err?.message || (typeof err === 'string' ? err : 'Unexpected error occurred');
          return { success: false, error: msg };
      }
+  };
+
+  const joinSemester = async (courseCode, studentNumber) => {
+      if (!supabase || !user) return { success: false, error: "Not logged in" };
+      
+      try {
+          // 1. Find Semester
+          const { data: semester } = await supabase.from('semesters').select('id, name').eq('course_code', courseCode).eq('is_active', true).single();
+          if (!semester) return { success: false, error: "Invalid or inactive Course Code." };
+          
+          // 2. Check if already enrolled
+          const { data: existing } = await supabase.from('enrollments').select('id').eq('semester_id', semester.id).eq('profile_id', user.id).maybeSingle();
+          if (existing) return { success: false, error: "You are already enrolled in this semester." };
+          
+          // 3. Enroll Self
+          // Note: Tag Number is hard to auto-assign safely without race conditions on client-side. 
+          // We set it to '00' or similar for now, admin can update it. Or user picks it? 
+          // For simplicity, we assign a random available one or '00'.
+          const { data, error } = await supabase.from('enrollments').insert([{
+              profile_id: user.id,
+              email: user.email,
+              semester_id: semester.id,
+              student_number: studentNumber,
+              tag_number: '00', // Admin must assign proper tag
+              status: 'active'
+          }]).select();
+
+          if (error) throw error;
+          
+          setEnrollments(prev => [...prev, data[0]]);
+          setCurrentSemesterId(semester.id);
+          return { success: true, semesterName: semester.name };
+
+      } catch (e: any) {
+          console.error("Join error:", e);
+          return { success: false, error: e.message || "Failed to join semester." };
+      }
   };
 
   const removeStudentFromSemester = async (enrollmentId) => {
@@ -382,7 +419,7 @@ export const DataProvider = ({ children }) => {
     <DataContext.Provider value={{ 
       semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates, notificationLogs, loading,
       currentSemesterId, setCurrentSemesterId, addSemester, toggleSemesterStatus, addProject, addScheduleItem,
-      addStudentToSemester, removeStudentFromSemester, updateProfileRole, addCheckIn, updateProjectStatus, updateInstructorNotes,
+      addStudentToSemester, joinSemester, removeStudentFromSemester, updateProfileRole, addCheckIn, updateProjectStatus, updateInstructorNotes,
       runDailyReminders
     }}>
       {children}

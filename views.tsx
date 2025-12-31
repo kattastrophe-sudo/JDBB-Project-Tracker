@@ -4,9 +4,48 @@ import { Button } from './components';
 import { ArrowLeft, Clock, Layout, Calendar, AlertTriangle, AlertCircle, Settings, Camera, CheckCircle, Lock, FileText, Send, User, Users, Shield, Filter, X, Plus, Archive, Power, Play, Mail, UserPlus, Trash2, Download, HelpCircle, Edit } from 'lucide-react';
 
 export const StudentDashboard = () => {
-  const { currentSemesterId, semesters, scheduleItems, projects, projectStates } = useData();
+  const { currentSemesterId, semesters, scheduleItems, projects, projectStates, joinSemester } = useData();
   const { user } = useAuth();
   const currentSemester = semesters.find(s => s.id === currentSemesterId);
+  
+  // If no active semester, show Join UI
+  const [joinCode, setJoinCode] = useState('');
+  const [joinError, setJoinError] = useState('');
+  const [studentNum, setStudentNum] = useState('');
+  
+  const handleJoin = async (e) => {
+      e.preventDefault();
+      setJoinError('');
+      if (!joinCode || !studentNum) return;
+      const res = await joinSemester(joinCode, studentNum);
+      if (!res.success) setJoinError(res.error);
+      else window.location.reload(); // Quick refresh to load semester data
+  };
+
+  if (!currentSemesterId || !currentSemester) {
+      return (
+          <div className="flex flex-col items-center justify-center py-20 animate-in fade-in zoom-in duration-300">
+             <div className="bg-white dark:bg-slate-900 p-8 rounded-3xl shadow-xl max-w-md w-full border-t-4" style={{ borderColor: COLORS.emerald }}>
+                 <div className="w-16 h-16 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mb-6 mx-auto"><Shield size={32} /></div>
+                 <h2 className="text-2xl font-bold text-center text-slate-800 dark:text-white mb-2">Join a Semester</h2>
+                 <p className="text-center text-slate-500 mb-6">Enter the Course Code provided by your instructor to access your project dashboard.</p>
+                 <form onSubmit={handleJoin} className="space-y-4">
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Course Code</label>
+                         <input type="text" value={joinCode} onChange={e => setJoinCode(e.target.value)} className="w-full text-center text-2xl font-mono font-bold tracking-widest p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:border-emerald-500 outline-none uppercase placeholder:text-slate-300" placeholder="ABC" maxLength={6} required />
+                     </div>
+                     <div>
+                         <label className="block text-xs font-bold text-slate-500 uppercase mb-1">Your Student #</label>
+                         <input type="text" value={studentNum} onChange={e => setStudentNum(e.target.value)} className="w-full text-center p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 focus:border-emerald-500 outline-none" placeholder="1234567" required />
+                     </div>
+                     {joinError && <div className="text-xs font-bold text-red-500 bg-red-50 p-2 rounded text-center">{joinError}</div>}
+                     <Button type="submit" variant="primary" fullWidth size="lg">Join Course</Button>
+                 </form>
+             </div>
+          </div>
+      );
+  }
+
   const upcomingItems = scheduleItems.filter(s => s.semesterId === currentSemesterId).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()).slice(0, 4);
   const activeProject = projects.find(p => p.isPublished) || projects[0];
   const activeProjectState = activeProject ? projectStates.find(ps => ps.projectId === activeProject.id && ps.studentId === user.id) : null;
@@ -306,7 +345,7 @@ export const RosterManager = ({ onSelectStudent }) => {
         <h3 className="font-bold text-emerald-600 dark:text-emerald-400 mb-4 flex items-center gap-2"><UserPlus size={18}/> Enroll Student into {currentSemester?.name}</h3>
         <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 text-blue-700 dark:text-blue-300 text-xs rounded-lg flex items-start gap-2">
            <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-           <p><strong>Note:</strong> Students must sign up for an account first. Use the <strong>Directory</strong> tab to see all registered users, or enter their exact email below if they have already signed up.</p>
+           <p><strong>Note:</strong> Students must sign up for an account first. If you see a "Permission Denied" error below, it means the database prevents Admins from enrolling others. Please ask the student to use the Course Code: <strong>{semesters.find(s=>s.id===currentSemesterId)?.courseCode}</strong></p>
         </div>
         <form onSubmit={handleAddStudent} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
