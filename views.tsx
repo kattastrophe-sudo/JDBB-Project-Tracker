@@ -241,16 +241,18 @@ export const RosterManager = ({ onSelectStudent }) => {
   const [isAdding, setIsAdding] = useState(false);
   const [newTag, setNewTag] = useState('');
   const [newStudentNum, setNewStudentNum] = useState('');
-  const [newName, setNewName] = useState('');
+  const [newName, setNewName] = useState(''); // Note: Name is not stored in enrollments, only profiles. This input is for reference.
   const [newEmail, setNewEmail] = useState('');
   const semesterEnrollments = enrollments.filter(e => e.semesterId === currentSemesterId);
   // Sort enrollments (handles missing profiles for pending users)
   const rosterData = semesterEnrollments.map(enrollment => ({ ...enrollment, profile: profiles.find(p => p.id === enrollment.profileId) })).sort((a, b) => parseInt(a.tagNumber) - parseInt(b.tagNumber));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [errorMsg, setErrorMsg] = useState('');
   
   const handleAddStudent = async (e) => { 
       e.preventDefault(); 
       setIsSubmitting(true);
+      setErrorMsg('');
       const result = await addStudentToSemester({ name: newName, email: newEmail, studentNumber: newStudentNum, tagNumber: newTag }, currentSemesterId); 
       setIsSubmitting(false);
       
@@ -258,14 +260,24 @@ export const RosterManager = ({ onSelectStudent }) => {
           setIsAdding(false); 
           setNewName(''); setNewEmail(''); setNewStudentNum(''); setNewTag(''); 
       } else {
-          alert(`Failed to add student. ${result.error || 'Check tag uniqueness.'}`);
+          setErrorMsg(result.error || 'Failed to add student. Please check inputs.');
       }
   };
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center"><div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Student Roster</h2><p className="text-slate-500">Students with "Pending" status need to Create an Account.</p></div><Button variant="primary" onClick={() => setIsAdding(!isAdding)}>{isAdding ? 'Cancel' : <><UserPlus size={18} /> Add Student</>}</Button></div>
-      {isAdding && <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50 animate-in fade-in slide-in-from-top-2 duration-300"><form onSubmit={handleAddStudent} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end"><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tag #</label><input type="text" maxLength={2} value={newTag} onChange={e => setNewTag(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required placeholder="01" /></div><div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Student #</label><input type="text" value={newStudentNum} onChange={e => setNewStudentNum(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required placeholder="1234567" /></div><div className="md:col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label><input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100" required placeholder="student@college.edu" /></div><div className="md:col-span-1"><Button type="submit" variant="primary" fullWidth disabled={isSubmitting}>{isSubmitting ? 'Adding...' : 'Confirm'}</Button></div></form></div>}
+      <div className="flex justify-between items-center"><div><h2 className="text-2xl font-bold text-slate-800 dark:text-slate-100">Student Roster</h2><p className="text-slate-500">Students with "Pending" status need to Create an Account.</p></div><Button variant="primary" onClick={() => { setIsAdding(!isAdding); setErrorMsg(''); }}>{isAdding ? 'Cancel' : <><UserPlus size={18} /> Add Student</>}</Button></div>
+      {isAdding && <div className="bg-white dark:bg-slate-900 p-6 rounded-lg shadow-sm border border-emerald-200 dark:border-emerald-900/50 animate-in fade-in slide-in-from-top-2 duration-300">
+        <form onSubmit={handleAddStudent} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
+                <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Tag #</label><input type="text" maxLength={2} value={newTag} onChange={e => setNewTag(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:border-emerald-500 outline-none" required placeholder="01" /></div>
+                <div><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Student #</label><input type="text" value={newStudentNum} onChange={e => setNewStudentNum(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:border-emerald-500 outline-none" required placeholder="1234567" /></div>
+                <div className="md:col-span-2"><label className="block text-xs font-bold text-slate-500 uppercase mb-1">Email</label><input type="email" value={newEmail} onChange={e => setNewEmail(e.target.value)} className="w-full border p-2 rounded text-sm dark:bg-slate-800 dark:border-slate-700 dark:text-slate-100 focus:border-emerald-500 outline-none" required placeholder="student@college.edu" /></div>
+                <div className="md:col-span-1"><Button type="submit" variant="primary" fullWidth disabled={isSubmitting}>{isSubmitting ? 'Adding...' : 'Confirm'}</Button></div>
+            </div>
+            {errorMsg && <div className="text-red-500 text-sm font-bold flex items-center gap-2"><AlertCircle size={16} /> {errorMsg}</div>}
+        </form>
+      </div>}
       <div className="bg-white dark:bg-slate-900 rounded-lg shadow-sm border border-slate-200 dark:border-slate-800 overflow-hidden"><table className="w-full text-left"><thead className="bg-slate-50 dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700"><tr><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase w-24 text-center">Tag #</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Student</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase">Status</th><th className="px-6 py-3 text-xs font-bold text-slate-500 uppercase text-right">Actions</th></tr></thead><tbody className="divide-y divide-slate-100 dark:divide-slate-800">{rosterData.map((record) => { const isPending = !record.profileId; return (<tr key={record.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"><td className="px-6 py-4 text-center cursor-pointer font-mono text-slate-600 dark:text-slate-300" onClick={() => !isPending && onSelectStudent && onSelectStudent(record.profileId)}>{record.tagNumber}</td><td className="px-6 py-4 cursor-pointer" onClick={() => !isPending && onSelectStudent && onSelectStudent(record.profileId)}><div className="font-bold text-slate-800 dark:text-slate-200">{record.profile?.fullName || <span className="text-slate-400 italic">No Account Created</span>}</div><div className="text-xs text-slate-500">{record.email || record.profile?.email}</div></td><td className="px-6 py-4">{isPending ? <span className="text-xs font-bold bg-amber-100 text-amber-800 px-2 py-1 rounded-full inline-flex items-center gap-1"><HelpCircle size={10} /> Pending Sign Up</span> : <span className="text-xs font-bold bg-green-100 text-green-800 px-2 py-1 rounded-full inline-flex items-center gap-1"><CheckCircle size={10} /> Active</span>}</td><td className="px-6 py-4 text-right"><button onClick={() => removeStudentFromSemester(record.id)} className="p-2 text-slate-300 hover:text-red-500"><Trash2 size={16} /></button></td></tr>); })}</tbody></table></div>
     </div>
   );

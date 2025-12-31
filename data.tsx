@@ -254,8 +254,18 @@ export const DataProvider = ({ children }) => {
          const { data, error } = await supabase.from('enrollments').insert([enrollmentPayload]).select();
 
          if (error) {
-             console.error("Add student error:", error);
-             return { success: false, error: error.message };
+             console.error("Add student error details:", error);
+             let errorMessage = error.message || "Unknown database error";
+             
+             // Check for unique constraint violation (Code 23505)
+             if (error.code === '23505') {
+                if (error.message?.includes('tag_number')) errorMessage = `Tag Number #${studentData.tagNumber} is already taken in this semester.`;
+                else if (error.message?.includes('student_number')) errorMessage = `Student Number ${studentData.studentNumber} is already enrolled.`;
+                else if (error.message?.includes('email')) errorMessage = `Email ${studentData.email} is already enrolled.`;
+                else errorMessage = "Duplicate entry found (Tag, Email, or Student # already exists).";
+             }
+             
+             return { success: false, error: errorMessage };
          }
 
          if (data) {
@@ -265,10 +275,11 @@ export const DataProvider = ({ children }) => {
              if(p) setProfiles(p);
              return { success: true };
          }
-         return { success: false, error: 'Unknown error occurred' };
-     } catch (err) {
+         return { success: false, error: 'Unknown error occurred (No data returned)' };
+     } catch (err: any) {
          console.error("Unexpected error adding student:", err);
-         return { success: false, error: err.message };
+         const msg = err?.message || (typeof err === 'string' ? err : 'Unexpected error occurred');
+         return { success: false, error: msg };
      }
   };
 
