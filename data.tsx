@@ -467,7 +467,7 @@ export const AuthProvider = ({ children }) => {
           setUser({
             id: authUser.id,
             email: authUser.email,
-            role: ROLES.STUDENT, 
+            role: ROLES.ADMIN_TECH, 
             name: authUser.user_metadata?.full_name || authUser.email
           });
       }
