@@ -22,6 +22,10 @@ export const Navbar = ({ toggleSidebar }) => {
   const { user, logout } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   
+  // Format role string (e.g. "admin_technologist" -> "Admin Technologist")
+  const displayRole = user.role.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+  const isStudent = user.role === ROLES.STUDENT;
+
   return (
     <header className="h-16 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 fixed w-full z-20 top-0 flex items-center justify-between px-4 lg:px-6 transition-colors shadow-sm">
       <div className="flex items-center gap-3">
@@ -33,7 +37,7 @@ export const Navbar = ({ toggleSidebar }) => {
       </div>
       <div className="flex items-center gap-4">
         <button onClick={toggleTheme} className="p-2 text-slate-400 hover:text-emerald-500 transition-colors">{isDark ? <Sun size={20} /> : <Moon size={20} />}</button>
-        <div className="hidden md:flex flex-col items-end"><span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{user.name}</span><span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full text-white font-bold shadow-sm" style={{ backgroundColor: user.role === ROLES.STUDENT ? COLORS.pacificCyan : COLORS.dustyGrape }}>{user.role}</span></div>
+        <div className="hidden md:flex flex-col items-end"><span className="text-sm font-semibold text-slate-700 dark:text-slate-200">{user.name}</span><span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full text-white font-bold shadow-sm" style={{ backgroundColor: isStudent ? COLORS.pacificCyan : COLORS.dustyGrape }}>{displayRole}</span></div>
         <button onClick={logout} className="p-2 text-slate-400 hover:text-red-600 transition-colors" title="Sign Out"><LogOut size={20} /></button>
       </div>
     </header>

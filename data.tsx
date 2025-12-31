@@ -1,4 +1,12 @@
 import React, { useState, createContext, useContext, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+
+// --- SUPABASE CONFIGURATION ---
+// TODO: Replace these with your actual values from Supabase Dashboard -> Project Settings -> API
+const SUPABASE_URL = 'INSERT_YOUR_SUPABASE_URL_HERE';
+const SUPABASE_ANON_KEY = 'INSERT_YOUR_SUPABASE_ANON_KEY_HERE';
+
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // --- JDBB Design System & Constants ---
 
@@ -13,65 +21,13 @@ export const COLORS = {
   textLight: '#64748B',   // Slate 500
 };
 
+// Updated to match Database Enums
 export const ROLES = {
-  ADMIN_TECH: 'Admin Technologist',
-  ADMIN_INSTRUCTOR: 'Admin Instructor',
-  MONITOR: 'Monitor',
-  STUDENT: 'Student',
+  ADMIN_TECH: 'admin_technologist',
+  ADMIN_INSTRUCTOR: 'admin_instructor',
+  MONITOR: 'monitor',
+  STUDENT: 'student',
 };
-
-// --- Mock Data ---
-
-const initialSemesters = [
-  { id: 'sem-1', name: 'Winter 2026 – Modelmaking & Casting', courseCode: 'JJEW-100', isActive: true, startDate: '2026-01-08' },
-  { id: 'sem-2', name: 'Fall 2025 – Fabrication 1', courseCode: 'JJEW-100', isActive: false, startDate: '2025-09-05' },
-];
-
-const initialProjects = [
-  { id: 'p-1', semesterId: 'sem-1', code: 'P1', title: 'Orthographic Rendering', isPublished: true, description: 'Create 3 views of a simple ring design using standard drafting techniques.' },
-  { id: 'p-2', semesterId: 'sem-1', code: 'P2', title: 'Wax Carving Basics', isPublished: true, description: 'Carve a signet ring from green wax tube.' },
-  { id: 'p-3', semesterId: 'sem-1', code: 'P3', title: 'Lost Wax Casting', isPublished: false },
-];
-
-const initialSchedule = [
-  { id: 's-1', semesterId: 'sem-1', projectId: 'p-1', title: 'P1 Due Date', date: '2026-02-01', type: 'due' },
-  { id: 's-2', semesterId: 'sem-1', projectId: 'p-2', title: 'P2 Demo Day', date: '2026-02-03', type: 'demo' },
-  { id: 's-3', semesterId: 'sem-1', projectId: 'p-1', title: 'P1 Rough Draft Check', date: '2026-01-20', type: 'progress_check' },
-];
-
-const initialProfiles = [
-  { id: 'u-1', email: 'alex@student.jdbb.edu', role: ROLES.STUDENT, fullName: 'Alex Student' },
-  { id: 'u-2', email: 'sam@student.jdbb.edu', role: ROLES.STUDENT, fullName: 'Sam Jeweler' },
-  { id: 'u-3', email: 'casey@student.jdbb.edu', role: ROLES.STUDENT, fullName: 'Casey Caster' },
-  { id: 'u-4', email: 'jordan@student.jdbb.edu', role: ROLES.STUDENT, fullName: 'Jordan Gem' },
-  { id: 'u-5', email: 'taylor@student.jdbb.edu', role: ROLES.STUDENT, fullName: 'Taylor Tool' },
-];
-
-const initialEnrollments = [
-  { id: 'e-1', profileId: 'u-1', semesterId: 'sem-1', studentNumber: 'S1000001', tagNumber: '04', status: 'active' },
-  { id: 'e-2', profileId: 'u-2', semesterId: 'sem-1', studentNumber: 'S1000002', tagNumber: '12', status: 'active' },
-  { id: 'e-3', profileId: 'u-3', semesterId: 'sem-1', studentNumber: 'S1000003', tagNumber: '01', status: 'active' },
-  { id: 'e-4', profileId: 'u-4', semesterId: 'sem-1', studentNumber: 'S1000004', tagNumber: '15', status: 'active' },
-  { id: 'e-5', profileId: 'u-5', semesterId: 'sem-1', studentNumber: 'S1000005', tagNumber: '08', status: 'active' },
-];
-
-const initialCheckIns = [
-  { id: 'c-1', projectId: 'p-1', studentId: 'u-1', date: '2026-01-18T10:00:00', type: 'progress', content: 'Started the top view, struggling with the shank thickness.' },
-];
-
-const initialProjectStates = [
-  { id: 'ps-1', projectId: 'p-1', studentId: 'u-1', status: 'in_progress', lastActivity: '2026-01-18' },
-  { id: 'ps-2', projectId: 'p-1', studentId: 'u-2', status: 'submitted', lastActivity: '2026-01-19' },
-  { id: 'ps-3', projectId: 'p-1', studentId: 'u-3', status: 'reviewed', lastActivity: '2026-01-20' },
-  { id: 'ps-4', projectId: 'p-1', studentId: 'u-4', status: 'not_started', lastActivity: '2026-01-15' },
-  { id: 'ps-5', projectId: 'p-2', studentId: 'u-3', status: 'in_progress', lastActivity: '2026-01-21' },
-];
-
-const initialNotificationLogs = [
-  { id: 'n-1', date: '2026-01-30T08:00:00', recipient: 'alex@student.jdbb.edu', type: 'Reminder', subject: 'P1 Due in 2 days', status: 'Sent' },
-  { id: 'n-2', date: '2026-01-30T08:00:00', recipient: 'sam@student.jdbb.edu', type: 'Reminder', subject: 'P1 Due in 2 days', status: 'Sent' },
-  { id: 'n-3', date: '2026-01-28T08:00:00', recipient: 'jordan@student.jdbb.edu', type: 'Alert', subject: 'Missed Progress Check', status: 'Failed' },
-];
 
 // --- Contexts ---
 
@@ -96,58 +52,224 @@ export const ThemeProvider = ({ children }) => {
 export const DataContext = createContext(null);
 
 export const DataProvider = ({ children }) => {
-  const [semesters, setSemesters] = useState(initialSemesters);
-  const [projects, setProjects] = useState(initialProjects);
-  const [scheduleItems, setScheduleItems] = useState(initialSchedule);
-  const [profiles, setProfiles] = useState(initialProfiles);
-  const [enrollments, setEnrollments] = useState(initialEnrollments);
-  const [checkIns, setCheckIns] = useState(initialCheckIns);
-  const [projectStates, setProjectStates] = useState(initialProjectStates);
-  const [notificationLogs, setNotificationLogs] = useState(initialNotificationLogs);
-  const [currentSemesterId, setCurrentSemesterId] = useState('sem-1');
+  const { user } = useAuth();
+  const [loading, setLoading] = useState(false);
+  const [semesters, setSemesters] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [scheduleItems, setScheduleItems] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [enrollments, setEnrollments] = useState([]);
+  const [checkIns, setCheckIns] = useState([]);
+  const [projectStates, setProjectStates] = useState([]);
+  const [notificationLogs, setNotificationLogs] = useState([]); // Still local for now
+  const [currentSemesterId, setCurrentSemesterId] = useState(null);
 
-  const addSemester = (sem) => setSemesters([...semesters, { ...sem, id: `sem-${Date.now()}` }]);
-  const toggleSemesterStatus = (id) => setSemesters(prev => prev.map(s => s.id === id ? { ...s, isActive: !s.isActive } : s));
-  const addProject = (project) => setProjects([...projects, { ...project, id: `p-${Date.now()}` }]);
-  const addScheduleItem = (item) => setScheduleItems([...scheduleItems, { ...item, id: `s-${Date.now()}` }].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+  // Fetch Data when User logs in
+  useEffect(() => {
+    if (!user) {
+      // Clear data on logout
+      setSemesters([]);
+      setProjects([]);
+      setScheduleItems([]);
+      setProfiles([]);
+      setEnrollments([]);
+      setCheckIns([]);
+      setProjectStates([]);
+      return;
+    }
+
+    const fetchData = async () => {
+      setLoading(true);
+      try {
+        // Parallel fetching
+        const [
+          semestersRes, 
+          projectsRes, 
+          scheduleRes, 
+          profilesRes, 
+          enrollmentsRes, 
+          checkInsRes,
+          projectStatesRes
+        ] = await Promise.all([
+          supabase.from('semesters').select('*').order('start_date', { ascending: false }),
+          supabase.from('projects').select('*').order('sequence_order', { ascending: true }),
+          supabase.from('schedule_items').select('*').order('date', { ascending: true }),
+          supabase.from('profiles').select('*'),
+          supabase.from('enrollments').select('*'),
+          supabase.from('check_ins').select('*').order('created_at', { ascending: false }),
+          supabase.from('project_states').select('*')
+        ]);
+
+        if (semestersRes.data) {
+            setSemesters(semestersRes.data);
+            const activeSem = semestersRes.data.find(s => s.is_active);
+            if (activeSem) setCurrentSemesterId(activeSem.id);
+            else if (semestersRes.data.length > 0) setCurrentSemesterId(semestersRes.data[0].id);
+        }
+        if (projectsRes.data) setProjects(projectsRes.data);
+        if (scheduleRes.data) setScheduleItems(scheduleRes.data);
+        if (profilesRes.data) setProfiles(profilesRes.data);
+        if (enrollmentsRes.data) setEnrollments(enrollmentsRes.data);
+        if (checkInsRes.data) setCheckIns(checkInsRes.data);
+        if (projectStatesRes.data) setProjectStates(projectStatesRes.data);
+
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+
+    // Set up Realtime Subscriptions (Optional for MVP, but good for updates)
+    const channels = supabase.channel('custom-all-channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'check_ins' }, (payload) => {
+        if(payload.eventType === 'INSERT') setCheckIns(prev => [payload.new, ...prev]);
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'project_states' }, (payload) => {
+         // Re-fetch strictly to ensure consistency or handle local merge
+         supabase.from('project_states').select('*').then(res => { if(res.data) setProjectStates(res.data); });
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channels);
+    };
+
+  }, [user]);
+
+  // --- ACTIONS ---
+
+  const addSemester = async (sem) => {
+    const { data, error } = await supabase.from('semesters').insert([sem]).select();
+    if (data) setSemesters(prev => [...prev, data[0]]);
+  };
+
+  const toggleSemesterStatus = async (id) => {
+    const sem = semesters.find(s => s.id === id);
+    if (!sem) return;
+    const { data } = await supabase.from('semesters').update({ is_active: !sem.is_active }).eq('id', id).select();
+    if (data) setSemesters(prev => prev.map(s => s.id === id ? data[0] : s));
+  };
+
+  const addProject = async (project) => {
+    // Convert camelCase to snake_case for DB
+    const dbProject = {
+      semester_id: project.semesterId,
+      code: project.code,
+      title: project.title,
+      description: project.description,
+      is_published: project.isPublished
+    };
+    const { data } = await supabase.from('projects').insert([dbProject]).select();
+    if (data) setProjects(prev => [...prev, data[0]]);
+  };
+
+  const addScheduleItem = async (item) => {
+    const dbItem = {
+      semester_id: item.semesterId,
+      title: item.title,
+      date: item.date,
+      type: item.type
+    };
+    const { data } = await supabase.from('schedule_items').insert([dbItem]).select();
+    if (data) setScheduleItems(prev => [...prev, data[0]].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
+  };
   
-  const addStudentToSemester = (studentData, semesterId) => {
-    const newProfileId = `u-${Date.now()}`;
-    setProfiles([...profiles, { id: newProfileId, fullName: studentData.name, email: studentData.email, role: ROLES.STUDENT }]);
-    setEnrollments([...enrollments, { id: `e-${Date.now()}`, profileId: newProfileId, semesterId, studentNumber: studentData.studentNumber, tagNumber: studentData.tagNumber, status: 'active' }]);
+  const addStudentToSemester = async (studentData, semesterId) => {
+     // NOTE: Creating a new user via API is tricky without Admin Auth client. 
+     // For this MVP, we assume the Profile exists or we are just creating the Enrollment.
+     // If Profile doesn't exist, this will fail. User should be created in Supabase Auth first.
+     // However, we can check if profile exists by email.
+     
+     const { data: profileData } = await supabase.from('profiles').select('id').eq('email', studentData.email).single();
+     
+     if (!profileData) {
+         alert("Error: This student email must register in the system first.");
+         return;
+     }
+
+     const { data } = await supabase.from('enrollments').insert([{
+         profile_id: profileData.id,
+         semester_id: semesterId,
+         student_number: studentData.studentNumber,
+         tag_number: studentData.tagNumber,
+         status: 'active'
+     }]).select();
+
+     if (data) {
+         setEnrollments(prev => [...prev, data[0]]);
+         // Refresh profiles just in case
+         const { data: p } = await supabase.from('profiles').select('*');
+         if(p) setProfiles(p);
+     }
   };
 
-  const removeStudentFromSemester = (enrollmentId) => setEnrollments(enrollments.filter(e => e.id !== enrollmentId));
+  const removeStudentFromSemester = async (enrollmentId) => {
+    await supabase.from('enrollments').delete().eq('id', enrollmentId);
+    setEnrollments(prev => prev.filter(e => e.id !== enrollmentId));
+  };
   
-  const addCheckIn = (checkIn) => {
-    setCheckIns([{ ...checkIn, id: `c-${Date.now()}` }, ...checkIns]);
-    if (checkIn.type !== 'instructor_comment') updateProjectStatus(checkIn.projectId, checkIn.studentId, 'in_progress');
+  const addCheckIn = async (checkIn) => {
+    const dbCheckIn = {
+      project_id: checkIn.projectId,
+      student_id: checkIn.studentId,
+      type: checkIn.type,
+      content: checkIn.content,
+      image_url: checkIn.imageMockUrl
+    };
+    const { data } = await supabase.from('check_ins').insert([dbCheckIn]).select();
+    if (data) {
+        setCheckIns(prev => [data[0], ...prev]);
+        if (checkIn.type !== 'instructor_comment') {
+            updateProjectStatus(checkIn.projectId, checkIn.studentId, 'in_progress');
+        }
+    }
   };
 
-  const updateProjectStatus = (projectId, studentId, status) => {
-    setProjectStates(prev => {
-      const existing = prev.find(p => p.projectId === projectId && p.studentId === studentId);
-      if (existing) return prev.map(p => p.id === existing.id ? { ...p, status, lastActivity: new Date().toISOString() } : p);
-      return [...prev, { id: `ps-${Date.now()}`, projectId, studentId, status, lastActivity: new Date().toISOString() }];
-    });
+  const updateProjectStatus = async (projectId, studentId, status) => {
+    // Upsert logic
+    const { data: existing } = await supabase.from('project_states').select('id').match({project_id: projectId, student_id: studentId}).single();
+    
+    if (existing) {
+        const { data } = await supabase.from('project_states').update({ status, last_activity_at: new Date().toISOString() }).eq('id', existing.id).select();
+        if (data) setProjectStates(prev => prev.map(p => p.id === existing.id ? data[0] : p));
+    } else {
+        const { data } = await supabase.from('project_states').insert([{
+            project_id: projectId,
+            student_id: studentId,
+            status,
+            last_activity_at: new Date().toISOString()
+        }]).select();
+        if (data) setProjectStates(prev => [...prev, data[0]]);
+    }
   };
 
-  const updateInstructorNotes = (projectId, studentId, notes) => {
-    setProjectStates(prev => {
-      const existing = prev.find(p => p.projectId === projectId && p.studentId === studentId);
-      if (existing) return prev.map(p => p.id === existing.id ? { ...p, instructorNotes: notes } : p);
-      return [...prev, { id: `ps-${Date.now()}`, projectId, studentId, status: 'not_started', lastActivity: new Date().toISOString(), instructorNotes: notes }];
-    });
+  const updateInstructorNotes = async (projectId, studentId, notes) => {
+    const { data: existing } = await supabase.from('project_states').select('id').match({project_id: projectId, student_id: studentId}).single();
+    if (existing) {
+        const { data } = await supabase.from('project_states').update({ instructor_notes: notes }).eq('id', existing.id).select();
+         if (data) setProjectStates(prev => prev.map(p => p.id === existing.id ? data[0] : p));
+    } else {
+        const { data } = await supabase.from('project_states').insert([{
+            project_id: projectId,
+            student_id: studentId,
+            instructor_notes: notes,
+            last_activity_at: new Date().toISOString()
+        }]).select();
+        if (data) setProjectStates(prev => [...prev, data[0]]);
+    }
   };
 
   const runDailyReminders = () => {
-    const newLogs = []; // Mock logic simplified
-    setNotificationLogs(prev => [...newLogs, ...prev]);
+    // Mock for now
+    setNotificationLogs(prev => prev);
   };
 
   return (
     <DataContext.Provider value={{ 
-      semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates, notificationLogs,
+      semesters, projects, scheduleItems, profiles, enrollments, checkIns, projectStates, notificationLogs, loading,
       currentSemesterId, setCurrentSemesterId, addSemester, toggleSemesterStatus, addProject, addScheduleItem,
       addStudentToSemester, removeStudentFromSemester, addCheckIn, updateProjectStatus, updateInstructorNotes,
       runDailyReminders
@@ -161,13 +283,57 @@ export const AuthContext = createContext(null);
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
-  const login = (role) => setUser({
-      id: role === ROLES.STUDENT ? 'u-1' : 'u-admin',
-      name: role === ROLES.STUDENT ? 'Alex Student (Tag 04)' : `JDBB Staff (${role})`,
-      role: role,
-      email: 'user@jdbb.college.edu'
+  const [session, setSession] = useState(null);
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      if (session?.user) fetchProfile(session.user);
     });
-  const logout = () => setUser(null);
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session);
+      if (session?.user) fetchProfile(session.user);
+      else setUser(null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const fetchProfile = async (authUser) => {
+      // Fetch the custom profile (role, name) from 'profiles' table
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', authUser.id).single();
+      if (data) {
+          setUser({
+              id: authUser.id,
+              email: authUser.email,
+              role: data.role,
+              name: data.full_name || authUser.email
+          });
+      } else {
+          // If profile doesn't exist yet (first login?), we might need to rely on basic info or create one
+          // For safety, default to student role locally if not found, though DB RLS might block.
+          console.warn("Profile not found for user", authUser.id);
+          setUser({
+            id: authUser.id,
+            email: authUser.email,
+            role: ROLES.STUDENT, // Fallback
+            name: authUser.email
+          });
+      }
+  };
+
+  const login = async (email, password) => {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+  };
+
+  const logout = async () => {
+      await supabase.auth.signOut();
+  };
+
   return <AuthContext.Provider value={{ user, login, logout }}>{children}</AuthContext.Provider>;
 };
 
